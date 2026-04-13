@@ -1,0 +1,50 @@
+import type { NextApiRequest, NextApiResponse } from 'next';
+import { connectToDatabase } from '../../lib/mongodb';
+import bcrypt from 'bcryptjs';
+
+type Data = { success: boolean; message: string; user?: any };
+
+export default async function handler(req: NextApiRequest, res: NextApiResponse<Data>) {
+  if (req.method !== 'POST') {
+    return res.status(405).json({ success: false, message: 'Method not allowed' });
+  }
+
+  const { name, email, password } = req.body;
+  if (!name || !email || !password) {
+    return res.status(400).json({ success: false, message: 'name, email and password are required' });
+  }
+
+  const { db } = await connectToDatabase();
+  const users = db.collection('users');
+
+  const existing = await users.findOne({ email: email.toLowerCase() });
+  if (existing) {
+    return res.status(409).json({ success: false, message: 'Email already registered' });
+  }
+
+  const hashedPassword = await bcrypt.hash(password, 10);
+
+  const newUser = {
+    name,
+    email: email.toLowerCase(),
+    password: hashedPassword,
+    createdAt: new Date(),
+    enrolledCourses: [],
+    completedCourses: [],
+    progress: {},
+    certificates: [],
+  };
+
+  const result = await users.insertOne(newUser);
+  const saved = await users.findOne({ _id: result.insertedId }, { projection: { password: 0 } });
+
+  const userWithoutPassword = {
+    enrolledCourses: [],
+    completedCourses: [],
+    progress: {},
+    certificates: [],
+    ...saved,
+  };
+
+  return res.status(201).json({ success: true, message: 'Registered successfully', user: userWithoutPassword });
+}
