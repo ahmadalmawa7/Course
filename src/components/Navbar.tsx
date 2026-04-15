@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
-import { Menu, X, GraduationCap, User, LogOut, Shield, BookOpen, FileText, HelpCircle, ChevronDown } from 'lucide-react';
+import { Menu, X, User, LogOut, Shield, BookOpen, FileText, HelpCircle, ChevronDown } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -28,11 +28,11 @@ const Navbar = () => {
   return (
     <nav className="sticky top-0 z-50 border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80">
       <div className="container mx-auto flex h-16 items-center justify-between px-4">
-        <Link to="/" className="flex items-center gap-2">
-          <GraduationCap className="h-8 w-8 text-primary" />
+        <Link to="/" className="flex items-center gap-3">
+          <img src="/Logo.png" alt="Erudition Infinite Logo" className="h-12 w-auto" />
           <div className="flex flex-col">
-            <span className="font-heading text-lg font-bold leading-tight text-foreground">Erudition Infinite</span>
-            <span className="text-[10px] tracking-widest text-gold uppercase font-body">Integrating talent, thought & action</span>
+            <span className="font-serif text-xl font-bold leading-tight text-[#b30000]">ERUDITION INFINITE</span>
+            <span className="text-xs italic text-[#777]">Integrating talent, thought and action.</span>
           </div>
         </Link>
 

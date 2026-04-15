@@ -9,6 +9,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { toast } from 'sonner';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, PieChart, Pie, Cell } from 'recharts';
+import { CourseFormDialog } from "@/components/CourseFormDialog";
 
 type Tab = 'overview' | 'courses' | 'classes' | 'students' | 'payments' | 'articles' | 'comments' | 'certificates' | 'notes' | 'testimonials' | 'enquiries' | 'article-requests' | 'support' | 'settings' | 'categories';
 
@@ -77,28 +78,61 @@ const AdminPage = () => {
   const allComments = articles.flatMap(a => a.comments.map(c => ({ ...c, articleId: a.id, articleTitle: a.title })));
   // categories is now from useData()
 
-  const handleSaveCourse = async (formData: Record<string, string>) => {
-    const priceValue = Math.max(0, parseInt(formData.price) || 0);
-    const courseData: Omit<Course, 'id'> = {
-      title: formData.title, category: formData.category, description: formData.description,
-      instructor: formData.instructor || 'Lt Col Shreesh Kumar (Retd)', duration: formData.duration || '4 weeks',
-      modules: Math.max(0, parseInt(formData.modules) || 6), price: priceValue,
-      image: formData.image || '', level: formData.level || 'Beginner', enrolled: 0, rating: 4.5, modulesList: [],
-    };
-    try {
-      if (courseDialog.editing) {
-        await updateCourse(courseDialog.editing.id, courseData);
-        toast.success('Course updated!');
-      } else {
-        const newCourse: Course = { ...courseData, id: `c-${Date.now()}` } as Course;
-        await addCourse(newCourse);
-        toast.success('Course added!');
-      }
-      setCourseDialog({ open: false, editing: null });
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Failed to save course');
+  // const handleSaveCourse = async (formData: Record<string, string>) => {
+  //   const priceValue = Math.max(0, parseInt(formData.price) || 0);
+  //   const courseData: Omit<Course, 'id'> = {
+  //     title: formData.title, category: formData.category, description: formData.description,
+  //     instructor: formData.instructor || 'Lt Col Shreesh Kumar (Retd)', duration: formData.duration || '4 weeks',
+  //     modules: Math.max(0, parseInt(formData.modules) || 6), price: priceValue,
+  //     image: formData.image || '', level: formData.level || 'Beginner', enrolled: 0, rating: 4.5, modulesList: [],
+  //   };
+
+  const handleSaveCourse = async (data: Partial<Course>) => {
+  try {
+    if (courseDialog.editing) {
+      await updateCourse(courseDialog.editing.id, data);
+      toast.success('Course updated!');
+    } else {
+      const newCourse: Course = {
+        id: `c-${Date.now()}`,
+        title: data.title || '',
+        category: data.category || 'General',
+        description: data.description || '',
+        instructor: data.instructor || 'Lt Col Shreesh Kumar (Retd)',
+        duration: data.duration || '',
+        modules: data.modules || 0,
+        price: data.price || 0,
+        image: data.image || '',
+        level: data.level || 'Beginner',
+        enrolled: 0,
+        rating: 4.5,
+        modulesList: data.modulesList || [],
+      };
+
+      await addCourse(newCourse);
+      toast.success('Course added!');
     }
-  };
+
+    setCourseDialog({ open: false, editing: null });
+  } catch (error) {
+    toast.error(error instanceof Error ? error.message : 'Failed to save course');
+  }
+};
+
+  //   try {
+  //     if (courseDialog.editing) {
+  //       await updateCourse(courseDialog.editing.id, courseData);
+  //       toast.success('Course updated!');
+  //     } else {
+  //       const newCourse: Course = { ...courseData, id: `c-${Date.now()}` } as Course;
+  //       await addCourse(newCourse);
+  //       toast.success('Course added!');
+  //     }
+  //     setCourseDialog({ open: false, editing: null });
+  //   } catch (error) {
+  //     toast.error(error instanceof Error ? error.message : 'Failed to save course');
+  //   }
+  // };
 
   const handleSaveClass = (formData: Record<string, string>) => {
     const classData: Omit<LiveClass, 'id'> = {
@@ -814,124 +848,124 @@ const handleSaveCategory = async (formData: Record<string, string>) => {
 };
 
 // Form Dialogs
-function CourseFormDialog({ initial, categories, onSave, onClose }: { initial: Course | null; categories: string[]; onSave: (data: Record<string, string>) => void; onClose: () => void }) {
-  const [form, setForm] = useState({
-    title: initial?.title || '', category: initial?.category || categories[0] || '', description: initial?.description || '',
-    instructor: initial?.instructor || 'Lt Col Shreesh Kumar (Retd)', duration: initial?.duration || '',
-    modules: initial?.modules?.toString() || '', price: initial?.price?.toString() || '', level: initial?.level || 'Beginner',
-    image: initial?.image || '',
-  });
+// function CourseFormDialog({ initial, categories, onSave, onClose }: { initial: Course | null; categories: string[]; onSave: (data: Record<string, string>) => void; onClose: () => void }) {
+//   const [form, setForm] = useState({
+//     title: initial?.title || '', category: initial?.category || categories[0] || '', description: initial?.description || '',
+//     instructor: initial?.instructor || 'Lt Col Shreesh Kumar (Retd)', duration: initial?.duration || '',
+//     modules: initial?.modules?.toString() || '', price: initial?.price?.toString() || '', level: initial?.level || 'Beginner',
+//     image: initial?.image || '',
+//   });
 
-  useEffect(() => {
-    if (!initial && categories.length > 0) {
-      setForm((prev) => ({ ...prev, category: categories[0] }));
-    }
-  }, [categories, initial]);
-  const [imageFile, setImageFile] = useState<File | null>(null);
-  const [imageName, setImageName] = useState('No file chosen');
-  const [uploading, setUploading] = useState(false);
+//   useEffect(() => {
+//     if (!initial && categories.length > 0) {
+//       setForm((prev) => ({ ...prev, category: categories[0] }));
+//     }
+//   }, [categories, initial]);
+//   const [imageFile, setImageFile] = useState<File | null>(null);
+//   const [imageName, setImageName] = useState('No file chosen');
+//   const [uploading, setUploading] = useState(false);
 
-  const handleImageUpload = async (file: File) => {
-    setUploading(true);
-    try {
-      const formData = new FormData();
-      formData.append('file', file);
+//   const handleImageUpload = async (file: File) => {
+//     setUploading(true);
+//     try {
+//       const formData = new FormData();
+//       formData.append('file', file);
 
-      const response = await fetch('/api/upload', {
-        method: 'POST',
-        body: formData,
-      });
+//       const response = await fetch('/api/upload', {
+//         method: 'POST',
+//         body: formData,
+//       });
 
-      if (response.ok) {
-        const data = await response.json();
-        setForm({ ...form, image: data.url });
-        toast.success('Image uploaded successfully!');
-      } else {
-        toast.error('Failed to upload image');
-      }
-    } catch (error) {
-      toast.error('Upload failed');
-    } finally {
-      setUploading(false);
-    }
-  };
+//       if (response.ok) {
+//         const data = await response.json();
+//         setForm({ ...form, image: data.url });
+//         toast.success('Image uploaded successfully!');
+//       } else {
+//         toast.error('Failed to upload image');
+//       }
+//     } catch (error) {
+//       toast.error('Upload failed');
+//     } finally {
+//       setUploading(false);
+//     }
+//   };
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      setImageFile(file);
-      setImageName(file.name);
-      handleImageUpload(file);
-    }
-  };
-  return (
-    <DialogOverlay onClose={onClose}>
-      <div className="flex items-center justify-between mb-4">
-        <h3 className="font-heading text-lg font-semibold text-card-foreground">{initial ? 'Edit Course' : 'Add New Course'}</h3>
-        <button onClick={onClose}><X className="h-4 w-4 text-muted-foreground" /></button>
-      </div>
-      <div className="space-y-3">
-        <div><label className="text-xs font-medium text-muted-foreground mb-1 block">Title *</label><Input value={form.title} onChange={e => setForm({ ...form, title: e.target.value })} /></div>
-        <div>
-          <label className="text-xs font-medium text-muted-foreground mb-1 block">Category *</label>
-          <select
-            value={form.category}
-            onChange={e => setForm({ ...form, category: e.target.value })}
-            className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-          >
-            {categories.map((cat) => (
-              <option key={cat} value={cat}>{cat}</option>
-            ))}
-          </select>
-        </div>
-        <div><label className="text-xs font-medium text-muted-foreground mb-1 block">Description</label><Textarea value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} rows={3} /></div>
-        <div className="grid grid-cols-2 gap-3">
-          <div><label className="text-xs font-medium text-muted-foreground mb-1 block">Price (₹)</label><Input type="number" value={form.price} onChange={e => setForm({ ...form, price: e.target.value })} /></div>
-          <div><label className="text-xs font-medium text-muted-foreground mb-1 block">Duration</label><Input value={form.duration} onChange={e => setForm({ ...form, duration: e.target.value })} placeholder="e.g. 4 weeks" /></div>
-        </div>
-        <div className="grid grid-cols-2 gap-3">
-          <div><label className="text-xs font-medium text-muted-foreground mb-1 block">Modules</label><Input type="number" value={form.modules} onChange={e => setForm({ ...form, modules: e.target.value })} /></div>
-          <div>
-            <label className="text-xs font-medium text-muted-foreground mb-1 block">Level</label>
-            <select value={form.level} onChange={e => setForm({ ...form, level: e.target.value })} className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm">
-              <option>Beginner</option><option>Intermediate</option><option>Advanced</option>
-            </select>
-          </div>
-        </div>
-        <div><label className="text-xs font-medium text-muted-foreground mb-1 block">Instructor</label><Input value={form.instructor} onChange={e => setForm({ ...form, instructor: e.target.value })} /></div>
-        <div>
-          <label className="text-xs font-medium text-muted-foreground mb-1 block">Course Image</label>
-          <div className="space-y-2">
-            <div className="flex items-center gap-3">
-              <label className="rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground cursor-pointer hover:bg-primary/90">
-                Choose File
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={handleFileChange}
-                  disabled={uploading}
-                  className="sr-only"
-                />
-              </label>
-              <span className="text-xs text-muted-foreground truncate max-w-[220px]">{imageName}</span>
-            </div>
-            {uploading && <p className="text-xs text-muted-foreground">Uploading...</p>}
-            {form.image && (
-              <div className="flex items-center gap-2">
-                <img src={form.image} alt="Course preview" className="h-16 w-16 object-cover rounded" />
-                <span className="text-xs text-muted-foreground">Image uploaded</span>
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-      <div className="mt-4 flex gap-2 justify-end">
-        <Button variant="outline" size="sm" onClick={onClose}>Cancel</Button>
-        <Button size="sm" onClick={() => onSave(form)} disabled={!form.title || !form.category}><Save className="h-3 w-3 mr-1" /> {initial ? 'Update' : 'Create'}</Button>
-      </div>
-    </DialogOverlay>
-  );
-}
+//   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+//     const file = e.target.files?.[0];
+//     if (file) {     
+//       setImageFile(file);
+//       setImageName(file.name);
+//       handleImageUpload(file);
+//     }
+//   };
+//   return (
+//     <DialogOverlay onClose={onClose}>
+//       <div className="flex items-center justify-between mb-4">
+//         <h3 className="font-heading text-lg font-semibold text-card-foreground">{initial ? 'Edit Course' : 'Add New Course'}</h3>
+//         <button onClick={onClose}><X className="h-4 w-4 text-muted-foreground" /></button>
+//       </div>
+//       <div className="space-y-3">
+//         <div><label className="text-xs font-medium text-muted-foreground mb-1 block">Title *</label><Input value={form.title} onChange={e => setForm({ ...form, title: e.target.value })} /></div>
+//         <div>
+//           <label className="text-xs font-medium text-muted-foreground mb-1 block">Category *</label>
+//           <select
+//             value={form.category}
+//             onChange={e => setForm({ ...form, category: e.target.value })}
+//             className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+//           >
+//             {categories.map((cat) => (
+//               <option key={cat} value={cat}>{cat}</option>
+//             ))}
+//           </select>
+//         </div>
+//         <div><label className="text-xs font-medium text-muted-foreground mb-1 block">Description</label><Textarea value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} rows={3} /></div>
+//         <div className="grid grid-cols-2 gap-3">
+//           <div><label className="text-xs font-medium text-muted-foreground mb-1 block">Price (₹)</label><Input type="number" value={form.price} onChange={e => setForm({ ...form, price: e.target.value })} /></div>
+//           <div><label className="text-xs font-medium text-muted-foreground mb-1 block">Duration</label><Input value={form.duration} onChange={e => setForm({ ...form, duration: e.target.value })} placeholder="e.g. 4 weeks" /></div>
+//         </div>
+//         <div className="grid grid-cols-2 gap-3">
+//           <div><label className="text-xs font-medium text-muted-foreground mb-1 block">Modules</label><Input type="number" value={form.modules} onChange={e => setForm({ ...form, modules: e.target.value })} /></div>
+//           <div>
+//             <label className="text-xs font-medium text-muted-foreground mb-1 block">Level</label>
+//             <select value={form.level} onChange={e => setForm({ ...form, level: e.target.value })} className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm">
+//               <option>Beginner</option><option>Intermediate</option><option>Advanced</option>
+//             </select>
+//           </div>
+//         </div>
+//         <div><label className="text-xs font-medium text-muted-foreground mb-1 block">Instructor</label><Input value={form.instructor} onChange={e => setForm({ ...form, instructor: e.target.value })} /></div>
+//         <div>
+//           <label className="text-xs font-medium text-muted-foreground mb-1 block">Course Image</label>
+//           <div className="space-y-2">
+//             <div className="flex items-center gap-3">
+//               <label className="rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground cursor-pointer hover:bg-primary/90">
+//                 Choose File
+//                 <input
+//                   type="file"
+//                   accept="image/*"
+//                   onChange={handleFileChange}
+//                   disabled={uploading}
+//                   className="sr-only"
+//                 />
+//               </label>
+//               <span className="text-xs text-muted-foreground truncate max-w-[220px]">{imageName}</span>
+//             </div>
+//             {uploading && <p className="text-xs text-muted-foreground">Uploading...</p>}
+//             {form.image && (
+//               <div className="flex items-center gap-2">
+//                 <img src={form.image} alt="Course preview" className="h-16 w-16 object-cover rounded" />
+//                 <span className="text-xs text-muted-foreground">Image uploaded</span>
+//               </div>
+//             )}
+//           </div>
+//         </div>
+//       </div>
+//       <div className="mt-4 flex gap-2 justify-end">
+//         <Button variant="outline" size="sm" onClick={onClose}>Cancel</Button>
+//         <Button size="sm" onClick={() => onSave(form)} disabled={!form.title || !form.category}><Save className="h-3 w-3 mr-1" /> {initial ? 'Update' : 'Create'}</Button>
+//       </div>
+//     </DialogOverlay>
+//   );
+// }
 
 function ClassFormDialog({ initial, courses, onSave, onClose }: { initial: LiveClass | null; courses: Course[]; onSave: (data: Record<string, string>) => void; onClose: () => void }) {
   const [form, setForm] = useState({

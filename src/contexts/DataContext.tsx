@@ -1,10 +1,13 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { Course, LiveClass, Article, Payment, Note, Testimonial, Enquiry, ArticleRequest, SupportTicket } from '@/data/types';
+import {
+  Course, LiveClass, Article, Payment, Note, Testimonial,
+  Enquiry, ArticleRequest, SupportTicket, CourseReview
+} from '@/data/types';
 import {
   courses as initialCourses, liveClasses as initialClasses, articles as initialArticles,
   payments as initialPayments, notes as initialNotes, testimonials as initialTestimonials,
-  enquiries as initialEnquiries, articleRequests as initialArticleRequests, supportTickets as initialSupportTickets,
-  courseCategories as initialCategories
+  enquiries as initialEnquiries, articleRequests as initialArticleRequests,
+  supportTickets as initialSupportTickets, courseCategories as initialCategories
 } from '@/data/mockData';
 
 interface DataContextType {
@@ -21,6 +24,7 @@ interface DataContextType {
   addCourse: (course: Course) => Promise<void>;
   updateCourse: (id: string, course: Partial<Course>) => Promise<void>;
   deleteCourse: (id: string) => Promise<void>;
+  addCourseReview: (courseId: string, review: CourseReview) => Promise<void>;
   addLiveClass: (cls: LiveClass) => void;
   updateLiveClass: (id: string, cls: Partial<LiveClass>) => void;
   deleteLiveClass: (id: string) => void;
@@ -53,22 +57,6 @@ const DataContext = createContext<DataContextType | undefined>(undefined);
 export const DataProvider = ({ children }: { children: ReactNode }) => {
   const [courses, setCourses] = useState<Course[]>(initialCourses);
   const [liveClasses, setLiveClasses] = useState<LiveClass[]>(initialClasses);
-
-  useEffect(() => {
-    const fetchCourses = async () => {
-      try {
-        const response = await fetch('/api/courses');
-        if (response.ok) {
-          const data = await response.json();
-          setCourses(data.map((item: any) => ({ ...item, id: item._id ? item._id.toString() : item.id })));
-        }
-      } catch (error) {
-        console.error('Failed to fetch courses:', error);
-      }
-    };
-    fetchCourses();
-  }, []);
-
   const [articles, setArticles] = useState<Article[]>(initialArticles);
   const [payments, setPayments] = useState<Payment[]>(initialPayments);
   const [notes, setNotes] = useState<Note[]>(initialNotes);
@@ -78,6 +66,35 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
   const [supportTickets, setSupportTickets] = useState<SupportTicket[]>(initialSupportTickets);
   const [categories, setCategories] = useState<string[]>(initialCategories);
 
+  // Fetch courses from API on mount
+  useEffect(() => {
+    const fetchCourses = async () => {
+      try {
+        const response = await fetch('/api/courses');
+        if (response.ok) {
+          const data = await response.json();
+          if (Array.isArray(data) && data.length > 0) {
+            setCourses(data.map((item: any) => ({
+              ...item,
+              id: item._id ? item._id.toString() : item.id,
+              modulesList: item.modulesList || [],
+              highlights: item.highlights || [],
+              advantages: item.advantages || [],
+              requirements: item.requirements || [],
+              targetAudience: item.targetAudience || [],
+              recordedLectures: item.recordedLectures || [],
+              reviews: item.reviews || [],
+              tags: item.tags || [],
+            })));
+          }
+        }
+      } catch (error) {
+        console.error('Failed to fetch courses:', error);
+      }
+    };
+    fetchCourses();
+  }, []);
+
   // Fetch enquiries from API on mount
   useEffect(() => {
     const fetchEnquiries = async () => {
@@ -85,7 +102,9 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
         const response = await fetch('/api/enquiries');
         if (response.ok) {
           const data = await response.json();
-          setEnquiries(data.map((item: any) => ({ ...item, id: item._id ? item._id.toString() : item.id })));
+          if (Array.isArray(data) && data.length > 0) {
+            setEnquiries(data.map((item: any) => ({ ...item, id: item._id ? item._id.toString() : item.id })));
+          }
         }
       } catch (error) {
         console.error('Failed to fetch enquiries:', error);
@@ -101,7 +120,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
         const response = await fetch('/api/categories');
         if (response.ok) {
           const data = await response.json();
-          setCategories(data);
+          if (Array.isArray(data) && data.length > 0) setCategories(data);
         }
       } catch (error) {
         console.error('Failed to fetch categories:', error);
@@ -109,6 +128,84 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
     };
     fetchCategories();
   }, []);
+
+  const addCourse = async (c: Course) => {
+    try {
+      const response = await fetch('/api/courses', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(c),
+      });
+      if (!response.ok) throw new Error('Failed to add course');
+      const saved = await response.json();
+      const newCourse: Course = {
+        ...c,
+        ...saved,
+        id: saved._id?.toString ? saved._id.toString() : c.id,
+        modulesList: saved.modulesList || c.modulesList || [],
+        highlights: saved.highlights || c.highlights || [],
+        advantages: saved.advantages || c.advantages || [],
+        requirements: saved.requirements || c.requirements || [],
+        targetAudience: saved.targetAudience || c.targetAudience || [],
+        recordedLectures: saved.recordedLectures || c.recordedLectures || [],
+        reviews: saved.reviews || c.reviews || [],
+        tags: saved.tags || c.tags || [],
+      };
+      setCourses(p => [...p, newCourse]);
+    } catch (error) {
+      console.error('Failed to add course:', error);
+      throw error;
+    }
+  };
+
+  const updateCourse = async (id: string, d: Partial<Course>) => {
+    try {
+      const response = await fetch('/api/courses', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, data: d }),
+      });
+      if (!response.ok) throw new Error('Failed to update course');
+      setCourses(p => p.map(c => c.id === id ? { ...c, ...d } : c));
+    } catch (error) {
+      console.error('Failed to update course:', error);
+      throw error;
+    }
+  };
+
+  const deleteCourse = async (id: string) => {
+    try {
+      const response = await fetch('/api/courses', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id }),
+      });
+      if (!response.ok) throw new Error('Failed to delete course');
+      setCourses(p => p.filter(c => c.id !== id));
+    } catch (error) {
+      console.error('Failed to delete course:', error);
+      throw error;
+    }
+  };
+
+  const addCourseReview = async (courseId: string, review: CourseReview) => {
+    try {
+      // Update locally immediately
+      setCourses(p => p.map(c =>
+        c.id === courseId
+          ? { ...c, reviews: [...(c.reviews || []), review] }
+          : c
+      ));
+      // Persist to API
+      await fetch('/api/courses', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: courseId, review }),
+      });
+    } catch (error) {
+      console.error('Failed to add review:', error);
+    }
+  };
 
   const addCategory = async (category: string) => {
     try {
@@ -138,7 +235,6 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       });
       if (response.ok) {
         setCategories(prev => prev.map(c => c === oldCategory ? newCategory : c));
-        // Update local state references
         setCourses(prev => prev.map(course => course.category === oldCategory ? { ...course, category: newCategory } : course));
         setArticles(prev => prev.map(article => article.category === oldCategory ? { ...article, category: newCategory } : article));
         setNotes(prev => prev.map(note => note.category === oldCategory ? { ...note, category: newCategory } : note));
@@ -161,7 +257,6 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       });
       if (response.ok) {
         setCategories(prev => prev.filter(c => c !== category));
-        // Update local state references
         setCourses(prev => prev.map(course => course.category === category ? { ...course, category: 'All' } : course));
         setArticles(prev => prev.map(article => article.category === category ? { ...article, category: 'All' } : article));
         setNotes(prev => prev.map(note => note.category === category ? { ...note, category: 'All' } : note));
@@ -177,52 +272,9 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
 
   return (
     <DataContext.Provider value={{
-      courses, liveClasses, articles, payments, notes, testimonials, enquiries, articleRequests, supportTickets, categories,
-      addCourse: async (c) => {
-        try {
-          const response = await fetch('/api/courses', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(c),
-          });
-          if (!response.ok) throw new Error('Failed to add course');
-          const saved = await response.json();
-          const newCourse = { ...c, id: saved._id?.toString ? saved._id.toString() : c.id };
-          setCourses(p => [...p, newCourse]);
-        } catch (error) {
-          console.error('Failed to add course:', error);
-          throw error;
-        }
-      },
-      updateCourse: async (id, d) => {
-        try {
-          const response = await fetch('/api/courses', {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ id, data: d }),
-          });
-          if (!response.ok) throw new Error('Failed to update course');
-          const updated = await response.json();
-          setCourses(p => p.map(c => c.id === id ? { ...c, ...d, ...updated, id } : c));
-        } catch (error) {
-          console.error('Failed to update course:', error);
-          throw error;
-        }
-      },
-      deleteCourse: async (id) => {
-        try {
-          const response = await fetch('/api/courses', {
-            method: 'DELETE',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ id }),
-          });
-          if (!response.ok) throw new Error('Failed to delete course');
-          setCourses(p => p.filter(c => c.id !== id));
-        } catch (error) {
-          console.error('Failed to delete course:', error);
-          throw error;
-        }
-      },
+      courses, liveClasses, articles, payments, notes, testimonials,
+      enquiries, articleRequests, supportTickets, categories,
+      addCourse, updateCourse, deleteCourse, addCourseReview,
       addLiveClass: (c) => setLiveClasses(p => [...p, c]),
       updateLiveClass: (id, d) => setLiveClasses(p => p.map(c => c.id === id ? { ...c, ...d } : c)),
       deleteLiveClass: (id) => setLiveClasses(p => p.filter(c => c.id !== id)),
@@ -245,39 +297,32 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(e),
           });
-          if (!response.ok) throw new Error('Failed to add enquiry');
-          const saved = await response.json();
-          const newEnquiry = { ...e, id: saved._id?.toString ? saved._id.toString() : e.id };
-          setEnquiries(p => [...p, newEnquiry]);
-        } catch (error) {
-          console.error('Failed to add enquiry:', error);
-          // Fallback to local state if API fails
+          if (response.ok) {
+            const saved = await response.json();
+            setEnquiries(p => [...p, { ...e, id: saved._id?.toString ? saved._id.toString() : e.id }]);
+          } else {
+            setEnquiries(p => [...p, e]);
+          }
+        } catch {
           setEnquiries(p => [...p, e]);
         }
       },
       updateEnquiryStatus: async (id, s) => {
         try {
-          const response = await fetch('/api/enquiries', {
+          await fetch('/api/enquiries', {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ id, data: { status: s } }),
           });
-          if (!response.ok) throw new Error('Failed to update enquiry status');
-          setEnquiries(p => p.map(e => e.id === id ? { ...e, status: s } : e));
-        } catch (error) {
-          console.error('Failed to update enquiry status:', error);
-          // Fallback to local state if API fails
-          setEnquiries(p => p.map(e => e.id === id ? { ...e, status: s } : e));
-        }
+        } catch {}
+        setEnquiries(p => p.map(e => e.id === id ? { ...e, status: s } : e));
       },
       addArticleRequest: (r) => setArticleRequests(p => [...p, r]),
       updateArticleRequestStatus: (id, s) => setArticleRequests(p => p.map(r => r.id === id ? { ...r, status: s } : r)),
       addSupportTicket: (t) => setSupportTickets(p => [...p, t]),
       addSupportMessage: (tId, m) => setSupportTickets(p => p.map(t => t.id === tId ? { ...t, messages: [...t.messages, m] } : t)),
       closeSupportTicket: (id) => setSupportTickets(p => p.map(t => t.id === id ? { ...t, status: 'closed' } : t)),
-      addCategory,
-      updateCategory,
-      deleteCategory,
+      addCategory, updateCategory, deleteCategory,
     }}>
       {children}
     </DataContext.Provider>

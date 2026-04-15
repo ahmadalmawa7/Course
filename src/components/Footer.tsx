@@ -1,16 +1,16 @@
 import { Link } from 'react-router-dom';
-import { GraduationCap, Mail, Phone, MapPin } from 'lucide-react';
+import { Mail, Phone, MapPin } from 'lucide-react';
 
 const Footer = () => (
   <footer className="border-t border-border bg-charcoal text-secondary">
     <div className="container mx-auto px-4 py-12">
       <div className="grid gap-8 md:grid-cols-4">
         <div>
-          <div className="mb-4 flex items-center gap-2">
-            <GraduationCap className="h-7 w-7 text-gold" />
-            <div>
-              <p className="font-heading text-lg font-bold text-secondary">Erudition Infinite</p>
-              <p className="text-[10px] tracking-widest text-gold uppercase">Integrating talent, thought & action</p>
+          <div className="mb-4 flex items-center gap-3">
+            <img src="/Logo.png" alt="Erudition Infinite Logo" className="h-12 w-auto" />
+            <div className="flex flex-col">
+              <span className="font-serif text-xl font-bold leading-tight text-[#b30000]">ERUDITION INFINITE</span>
+              <span className="text-xs italic text-[#777]">Integrating talent, thought and action.</span>
             </div>
           </div>
           <p className="text-sm text-secondary/70 leading-relaxed">

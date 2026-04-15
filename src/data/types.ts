@@ -1,17 +1,60 @@
+export interface CourseModule {
+  title: string;
+  lessons: number;
+  duration: string;
+  topics?: string[];
+}
+
+export interface CourseReview {
+  id: string;
+  userId: string;
+  userName: string;
+  rating: number;
+  comment: string;
+  date: string;
+}
+
+export interface RecordedLecture {
+  id: string;
+  moduleIndex: number;
+  title: string;
+  duration: string;
+  videoUrl: string;
+  isPreview: boolean;
+}
+
 export interface Course {
   id: string;
   title: string;
   category: string;
   description: string;
   instructor: string;
+  instructorBio?: string;
   duration: string;
   modules: number;
   price: number;
+  originalPrice?: number;
   image: string;
   level: string;
   enrolled: number;
   rating: number;
-  modulesList: { title: string; lessons: number; duration: string }[];
+  totalRatings?: number;
+  modulesList: CourseModule[];
+  // Rich fields
+  highlights?: string[];          // "What you'll learn" bullet points
+  whyTake?: string;               // Why this course paragraph
+  advantages?: string[];          // Advantages / who this is for
+  requirements?: string[];        // Prerequisites
+  targetAudience?: string[];      // Who should take this
+  language?: string;
+  certificate?: boolean;
+  liveSessionsIncluded?: boolean;
+  notesIncluded?: boolean;
+  recordedLectures?: RecordedLecture[];
+  reviews?: CourseReview[];
+  syllabus?: string;              // Long-form syllabus text
+  tags?: string[];
+  lastUpdated?: string;
 }
 
 export interface LiveClass {
