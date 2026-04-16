@@ -21,7 +21,7 @@ const LoginPage = () => {
     } else {
       login(email, password);
       toast.success('Login successful');
-      navigate('/dashboard');
+      navigate('/');
     }
   };
 

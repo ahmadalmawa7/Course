@@ -6,10 +6,10 @@ import { Button } from '@/components/ui/button';
 
 const MyCoursesPage = () => {
   const { user } = useAuth();
-  const { courses } = useData();
+  const { getEnrolledCourses, getCourseProgress } = useData();
   if (!user) return <Navigate to="/login" />;
 
-  const enrolledCourses = courses.filter(c => user.enrolledCourses.includes(c.id));
+  const enrolledCourses = getEnrolledCourses(user.id);
 
   return (
     <div>
@@ -32,8 +32,8 @@ const MyCoursesPage = () => {
           ) : (
             <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
               {enrolledCourses.map(course => {
-                const progress = user.progress[course.id] || 0;
-                const isCompleted = user.completedCourses.includes(course.id);
+                const progress = getCourseProgress(user.id, course.id);
+                const isCompleted = progress === 100;
                 return (
                   <div key={course.id} className="rounded-lg border border-border bg-card overflow-hidden hover:shadow-lg transition-shadow">
                     <div className="bg-gradient-hero p-4">
@@ -54,7 +54,7 @@ const MyCoursesPage = () => {
                         <div className={`h-full rounded-full transition-all ${isCompleted ? 'bg-green-500' : 'bg-gold'}`} style={{ width: `${progress}%` }} />
                       </div>
                       {isCompleted && <span className="inline-block rounded-sm bg-green-100 text-green-700 px-2 py-0.5 text-xs font-medium mb-3">✓ Completed</span>}
-                      <Link to={`/courses/${course.id}`}>
+                      <Link to={`/learn/${course.id}`}>
                         <Button variant="outline" size="sm" className="w-full border-primary text-primary text-xs">
                           {isCompleted ? 'Review Course' : 'Continue Learning'}
                         </Button>

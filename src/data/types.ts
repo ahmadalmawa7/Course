@@ -163,3 +163,23 @@ export interface SupportTicket {
   status: 'open' | 'closed';
   date: string;
 }
+
+export interface Enrollment {
+  id: string;
+  userId: string;
+  courseId: string;
+  paymentStatus: 'success' | 'pending' | 'failed';
+  progress: number;
+  enrolledAt: string;
+  lastAccessedAt?: string;
+}
+
+export interface LectureProgress {
+  id: string;
+  userId: string;
+  lectureId: string;
+  courseId: string;
+  completed: boolean;
+  watchTime: number;
+  completedAt?: string;
+}

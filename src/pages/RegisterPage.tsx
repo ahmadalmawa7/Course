@@ -16,7 +16,7 @@ const RegisterPage = () => {
     e.preventDefault();
     register(name, email, password);
     toast.success('Registration successful! Welcome to Erudition Infinite.');
-    navigate('/dashboard');
+    navigate('/');
   };
 
   return (

@@ -26,7 +26,7 @@ const Navbar = () => {
   const location = useLocation();
 
   return (
-    <nav className="sticky top-0 z-50 border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80">
+    <nav className="sticky top-0 z-50 border-b border-border bg-background backdrop-blur supports-[backdrop-filter]:bg-background/95">
       <div className="container mx-auto flex h-16 items-center justify-between px-4">
         <Link to="/" className="flex items-center gap-3">
           <img src="/Logo.png" alt="Erudition Infinite Logo" className="h-12 w-auto" />

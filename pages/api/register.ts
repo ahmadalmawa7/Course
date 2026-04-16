@@ -1,6 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { connectToDatabase } from '../../lib/mongodb';
 import bcrypt from 'bcryptjs';
+import { sendWelcomeEmail } from '../../lib/email';
 
 type Data = { success: boolean; message: string; user?: any };
 
@@ -45,6 +46,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse<
     certificates: [],
     ...saved,
   };
+
+  // Send welcome email
+  try {
+    await sendWelcomeEmail(email.toLowerCase(), name);
+  } catch (emailError) {
+    console.error('Failed to send welcome email:', emailError);
+    // Don't fail registration if email fails
+  }
 
   return res.status(201).json({ success: true, message: 'Registered successfully', user: userWithoutPassword });
 }

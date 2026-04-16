@@ -27,7 +27,7 @@ const StarRating = ({ rating, size = 'sm' }: { rating: number; size?: 'sm' | 'lg
 const CourseDetailPage = () => {
   const { id } = useParams();
   const { user } = useAuth();
-  const { courses, notes, liveClasses, addCourseReview } = useData();
+  const { courses, notes, liveClasses, addCourseReview, enrollCourse, isEnrolled, getCourseProgress } = useData();
   const [activeTab, setActiveTab] = useState<Tab>('Overview');
   const [expandedModules, setExpandedModules] = useState<number[]>([0]);
   const [reviewText, setReviewText] = useState('');
@@ -36,9 +36,20 @@ const CourseDetailPage = () => {
 
   // Find course
   const course = courses.find((c) => c.id === id);
-  const isEnrolled = Boolean(user?.enrolledCourses?.includes(id || ''));
+  const isUserEnrolled = user && isEnrolled(user.id, id || '');
+  const progress = user ? getCourseProgress(user.id, id || '') : 0;
   const courseNotes = notes.filter((n) => n.courseId === id);
   const courseLiveClasses = liveClasses.filter((lc) => lc.courseId === id);
+
+  const handleEnroll = async () => {
+    if (!user || !id) return;
+    try {
+      await enrollCourse(user.id, id);
+      toast.success('Enrolled Successfully 🎉');
+    } catch (error) {
+      toast.error('Failed to enroll');
+    }
+  };
 
   const toggleModule = (idx: number) => {
     setExpandedModules((prev) =>
@@ -151,9 +162,11 @@ const CourseDetailPage = () => {
             <div className="hidden md:block">
               <PricingCard
                 course={course}
-                isEnrolled={isEnrolled}
+                isEnrolled={isUserEnrolled}
                 discount={discount}
                 user={user}
+                onEnroll={handleEnroll}
+                progress={progress}
               />
             </div>
           </div>
@@ -162,7 +175,7 @@ const CourseDetailPage = () => {
 
       {/* Mobile Pricing */}
       <div className="md:hidden border-b border-border bg-card px-4 py-4">
-        <PricingCard course={course} isEnrolled={isEnrolled} discount={discount} user={user} />
+        <PricingCard course={course} isEnrolled={isUserEnrolled} discount={discount} user={user} onEnroll={handleEnroll} progress={progress} />
       </div>
 
       {/* Tabs */}
@@ -364,12 +377,12 @@ const CourseDetailPage = () => {
                         {moduleLectures.map((lec) => (
                           <div key={lec.id} className="flex items-center justify-between px-4 py-2.5 text-sm">
                             <div className="flex items-center gap-3">
-                              {lec.isPreview || isEnrolled ? (
+                              {lec.isPreview || isUserEnrolled ? (
                                 <Play className="h-3.5 w-3.5 text-primary shrink-0" />
                               ) : (
                                 <Lock className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
                               )}
-                              <span className={lec.isPreview || isEnrolled ? 'text-primary hover:underline cursor-pointer' : 'text-muted-foreground'}>
+                              <span className={lec.isPreview || isUserEnrolled ? 'text-primary hover:underline cursor-pointer' : 'text-muted-foreground'}>
                                 {lec.title}
                               </span>
                               {lec.isPreview && (
@@ -429,7 +442,7 @@ const CourseDetailPage = () => {
                         {cls.instructor}
                       </div>
                     </div>
-                    {isEnrolled ? (
+                    {isUserEnrolled ? (
                       <a href={cls.meetLink} target="_blank" rel="noopener noreferrer">
                         <Button size="sm" className="w-full bg-gold text-charcoal hover:bg-gold-dark font-semibold gap-1.5 text-xs">
                           <Video className="h-3.5 w-3.5" /> Join Google Meet
@@ -524,7 +537,7 @@ const CourseDetailPage = () => {
             </div>
 
             {/* Leave a Review */}
-            {user && isEnrolled && (
+            {user && isUserEnrolled && (
               <div className="rounded-lg border border-border bg-card p-5">
                 <h3 className="font-heading text-base font-semibold text-card-foreground mb-4">Leave a Review</h3>
                 <div className="flex gap-1 mb-3">
@@ -596,11 +609,15 @@ const PricingCard = ({
   isEnrolled,
   discount,
   user,
+  onEnroll,
+  progress,
 }: {
   course: any;
   isEnrolled: boolean;
   discount: number | null;
   user: any;
+  onEnroll?: () => void;
+  progress?: number;
 }) => (
   <div className="rounded-xl border border-border bg-card shadow-xl overflow-hidden">
     {/* Preview image */}
@@ -633,16 +650,18 @@ const PricingCard = ({
       </div>
 
       {isEnrolled ? (
-        <Button className="w-full bg-green-600 hover:bg-green-700 text-white mb-3 gap-1.5" disabled>
-          <CheckCircle className="h-4 w-4" /> Enrolled
-        </Button>
+        <Link to={`/learn/${course.id}`}>
+          <Button className="w-full bg-primary text-primary-foreground hover:bg-primary-hover mb-3 gap-1.5 font-semibold">
+            {progress === 100 ? 'Review Course' : 'Continue Learning'}
+          </Button>
+        </Link>
       ) : user ? (
-        <Button className="w-full bg-primary text-primary-foreground hover:bg-primary/90 mb-3 font-semibold">
+        <Button onClick={onEnroll} className="w-full bg-primary text-primary-foreground hover:bg-primary-hover mb-3 font-semibold">
           Enroll Now
         </Button>
       ) : (
         <Link to="/login">
-          <Button className="w-full bg-primary text-primary-foreground hover:bg-primary/90 mb-3 font-semibold">
+          <Button className="w-full bg-primary text-primary-foreground hover:bg-primary-hover mb-3 font-semibold">
             Sign In to Enroll
           </Button>
         </Link>

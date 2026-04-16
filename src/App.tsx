@@ -17,6 +17,7 @@ import ArticlesPage from "./pages/ArticlesPage";
 import ArticleDetailPage from "./pages/ArticleDetailPage";
 import NotesPage from "./pages/NotesPage";
 import MyCoursesPage from "./pages/MyCoursesPage";
+import CourseLearningPage from "./pages/CourseLearningPage";
 import ProfilePage from "./pages/ProfilePage";
 import SupportPage from "./pages/SupportPage";
 import LoginPage from "./pages/LoginPage";
@@ -48,6 +49,7 @@ const App = () => (
                   <Route path="/articles/:id" element={<ArticleDetailPage />} />
                   <Route path="/notes" element={<NotesPage />} />
                   <Route path="/my-courses" element={<MyCoursesPage />} />
+                  <Route path="/learn/:id" element={<CourseLearningPage />} />
                   <Route path="/profile" element={<ProfilePage />} />
                   <Route path="/support" element={<SupportPage />} />
                   <Route path="/login" element={<LoginPage />} />

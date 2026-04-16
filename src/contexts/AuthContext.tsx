@@ -9,8 +9,8 @@ interface AuthContextType {
   adminLogin: (email: string, password: string) => boolean;
   register: (name: string, email: string, password: string) => Promise<boolean>;
   logout: () => void;
-  enrollInCourse: (courseId: string) => void;
-  updateProgress: (courseId: string, progress: number) => void;
+  enrollInCourse: (courseId: string) => Promise<void>;
+  updateProgress: (courseId: string, progress: number) => Promise<void>;
   updateProfile: (data: Partial<User>) => void;
 }
 
@@ -100,14 +100,45 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
-  const enrollInCourse = (courseId: string) => {
-    if (user && !user.enrolledCourses.includes(courseId)) {
-      setUser({ ...user, enrolledCourses: [...user.enrolledCourses, courseId], progress: { ...user.progress, [courseId]: 0 } });
+  const enrollInCourse = async (courseId: string) => {
+    if (!user) return;
+    if (user.enrolledCourses.includes(courseId)) return;
+
+    try {
+      const res = await fetch('/api/enroll', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: user.id, courseId }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setUser(data.user);
+      } else {
+        console.error('Failed to enroll:', data.message);
+      }
+    } catch (error) {
+      console.error('Error enrolling in course:', error);
     }
   };
 
-  const updateProgress = (courseId: string, progress: number) => {
-    if (user) setUser({ ...user, progress: { ...user.progress, [courseId]: progress } });
+  const updateProgress = async (courseId: string, progress: number) => {
+    if (!user) return;
+
+    try {
+      const res = await fetch('/api/enrollment/progress', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: user.id, courseId, progress }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setUser({ ...user, progress: { ...user.progress, [courseId]: progress } });
+      } else {
+        console.error('Failed to update progress:', data.message);
+      }
+    } catch (error) {
+      console.error('Error updating progress:', error);
+    }
   };
 
   const updateProfile = (data: Partial<User>) => {

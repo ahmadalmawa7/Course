@@ -1,24 +1,35 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { useData } from '@/contexts/DataContext';
 import { useAuth } from '@/contexts/AuthContext';
-import { ArrowRight, BookOpen, Users, Award, Video, Star, Calendar, Clock } from 'lucide-react';
+import { ArrowRight, BookOpen, Users, Award, Video, Star, Calendar, Clock, TrendingUp } from 'lucide-react';
 import { toast } from 'sonner';
 import EnquiryPopup from '@/components/EnquiryPopup';
 
 const HomePage = () => {
-  const { courses, liveClasses, articles, testimonials, addTestimonial } = useData();
+  const { courses, liveClasses, articles, testimonials, addTestimonial, getEnrolledCourses, getCourseProgress } = useData();
   const { user } = useAuth();
   const featuredCourses = courses.slice(0, 4);
   const upcomingClasses = liveClasses.slice(0, 3);
   const latestArticles = articles.slice(0, 3);
   const approvedTestimonials = testimonials.filter(t => t.approved);
+  const enrolledCourses = user ? getEnrolledCourses(user.id) : [];
 
   const [showFeedback, setShowFeedback] = useState(false);
   const [feedbackForm, setFeedbackForm] = useState({ text: '', rating: 5 });
+  const videoRef = useRef<HTMLVideoElement>(null);
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (video) {
+      video.play().catch(error => {
+        console.error('Video autoplay failed:', error);
+      });
+    }
+  }, []);
 
   const handleFeedback = () => {
     if (!feedbackForm.text) { toast.error('Please write your feedback.'); return; }
@@ -35,20 +46,83 @@ const HomePage = () => {
   return (
     <div>
       {/* Hero Section */}
-      <section className="relative overflow-hidden bg-gradient-hero py-24 md:py-32">
-        <div className="absolute inset-0 opacity-10" style={{ backgroundImage: 'url("data:image/svg+xml,%3Csvg width=\'60\' height=\'60\' viewBox=\'0 0 60 60\' xmlns=\'http://www.w3.org/2000/svg\'%3E%3Cg fill=\'none\' fill-rule=\'evenodd\'%3E%3Cg fill=\'%23ffffff\' fill-opacity=\'0.15\'%3E%3Cpath d=\'M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z\'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")' }} />
-        <div className="container relative mx-auto px-4 text-center">
+      <section className="relative overflow-hidden min-h-[600px] py-24 md:py-32" style={{ backgroundColor: '#0f172a' }}>
+        <video
+          ref={videoRef}
+          autoPlay
+          loop
+          muted
+          playsInline
+          className="absolute top-0 left-0 w-full h-full object-cover"
+          style={{ pointerEvents: 'none' }}
+        >
+          <source src="/course_sell_video.mp4" type="video/mp4" />
+        </video>
+        <div className="absolute inset-0 bg-black/50" style={{ zIndex: 5 }} />
+        <div className="absolute inset-0 opacity-10" style={{ zIndex: 6, backgroundImage: 'url("data:image/svg+xml,%3Csvg width=\'60\' height=\'60\' viewBox=\'0 0 60 60\' xmlns=\'http://www.w3.org/2000/svg\'%3E%3Cg fill=\'none\' fill-rule=\'evenodd\'%3E%3Cg fill=\'%23ffffff\' fill-opacity=\'0.15\'%3E%3Cpath d=\'M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z\'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")' }} />
+        <div className="container relative mx-auto px-4 text-center" style={{ zIndex: 10, position: 'relative' }}>
           <p className="mb-4 text-sm font-medium tracking-[0.3em] text-gold uppercase animate-fade-in-up">We will help you achieve transformation…</p>
-          <h1 className="mb-6 font-heading text-4xl font-bold leading-tight text-secondary md:text-6xl lg:text-7xl animate-fade-in-up" style={{ animationDelay: '0.1s' }}>Erudition Infinite</h1>
-          <p className="mx-auto mb-6 max-w-2xl text-lg text-secondary/80 animate-fade-in-up" style={{ animationDelay: '0.2s' }}>
+          <h1 className="mb-6 font-heading text-4xl font-bold leading-tight text-white md:text-6xl lg:text-7xl animate-fade-in-up" style={{ animationDelay: '0.1s' }}>Erudition Infinite</h1>
+          <p className="mx-auto mb-6 max-w-2xl text-lg text-[#F8F8F8] animate-fade-in-up" style={{ animationDelay: '0.2s' }}>
             To deliver training and management solutions to the total satisfaction and delight of the customer and exceed expectations.
           </p>
           <div className="flex flex-wrap items-center justify-center gap-4 animate-fade-in-up" style={{ animationDelay: '0.3s' }}>
-            <Link to="/courses"><Button size="lg" className="bg-gold text-charcoal hover:bg-gold-dark font-semibold px-8">Explore Courses <ArrowRight className="ml-2 h-4 w-4" /></Button></Link>
-            <Link to="/about"><Button size="lg" variant="outline" className="border-amber-700 text-amber-700 hover:bg-amber-700 hover:text-white">About Us</Button></Link>
+            <Link to="/courses"><Button size="lg" className="bg-primary text-primary-foreground hover:bg-primary-hover font-semibold px-8">Explore Courses <ArrowRight className="ml-2 h-4 w-4" /></Button></Link>
+            <Link to="/about"><Button size="lg" variant="outline" className="border-gold text-gold hover:bg-gold hover:text-charcoal">About Us</Button></Link>
           </div>
         </div>
       </section>
+
+      {/* My Enrolled Courses - Only for logged-in users */}
+      {user && enrolledCourses.length > 0 && (
+        <section className="bg-background py-12">
+          <div className="container mx-auto px-4">
+            <div className="mb-8 flex items-center justify-between">
+              <div>
+                <p className="mb-2 text-xs font-medium tracking-[0.3em] text-gold uppercase">My Learning</p>
+                <h2 className="font-heading text-3xl font-bold text-foreground md:text-4xl">My Enrolled Courses</h2>
+              </div>
+              <Link to="/my-courses">
+                <Button variant="outline" className="border-primary text-primary">View All</Button>
+              </Link>
+            </div>
+            <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+              {enrolledCourses.slice(0, 3).map(course => {
+                const progress = getCourseProgress(user.id, course.id);
+                const isCompleted = progress === 100;
+                return (
+                  <div key={course.id} className="rounded-lg border border-border bg-card overflow-hidden hover:shadow-lg transition-shadow">
+                    <div className="bg-gradient-hero p-4">
+                      <span className="inline-block rounded-sm bg-gold/20 px-2 py-0.5 text-xs font-medium text-gold mb-2">{course.category}</span>
+                      <h3 className="font-heading text-lg font-semibold text-secondary">{course.title}</h3>
+                    </div>
+                    <div className="p-5">
+                      <div className="flex items-center gap-4 text-xs text-muted-foreground mb-4">
+                        <span className="flex items-center gap-1"><Clock className="h-3 w-3" /> {course.duration}</span>
+                        <span className="flex items-center gap-1"><BookOpen className="h-3 w-3" /> {course.modules} modules</span>
+                        <span className="flex items-center gap-1"><Star className="h-3 w-3 text-gold" /> {course.rating}</span>
+                      </div>
+                      <div className="mb-2 flex items-center justify-between text-xs">
+                        <span className="text-muted-foreground flex items-center gap-1"><TrendingUp className="h-3 w-3" /> Progress</span>
+                        <span className="font-semibold text-card-foreground">{progress}%</span>
+                      </div>
+                      <div className="mb-4 h-2 rounded-full bg-muted overflow-hidden">
+                        <div className={`h-full rounded-full transition-all ${isCompleted ? 'bg-green-500' : 'bg-gold'}`} style={{ width: `${progress}%` }} />
+                      </div>
+                      {isCompleted && <span className="inline-block rounded-sm bg-green-100 text-green-700 px-2 py-0.5 text-xs font-medium mb-3">✓ Completed</span>}
+                      <Link to={`/learn/${course.id}`}>
+                        <Button variant="outline" size="sm" className="w-full border-primary text-primary text-xs">
+                          {isCompleted ? 'Review Course' : 'Continue Learning'}
+                        </Button>
+                      </Link>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </section>
+      )}
 
       {/* Stats */}
       <section className="border-b border-border bg-background py-12">
@@ -208,7 +282,7 @@ const HomePage = () => {
                   <Textarea value={feedbackForm.text} onChange={e => setFeedbackForm({ ...feedbackForm, text: e.target.value })} placeholder="Share your experience..." rows={3} className="mb-3 bg-secondary/10 border-secondary/20 text-secondary placeholder:text-secondary/40" />
                   <div className="flex gap-2 justify-center">
                     <Button variant="outline" size="sm" className="border-secondary/30 text-secondary" onClick={() => setShowFeedback(false)}>Cancel</Button>
-                    <Button size="sm" className="bg-gold text-charcoal hover:bg-gold-dark" onClick={handleFeedback}>Submit</Button>
+                    <Button size="sm" className="bg-primary text-primary-foreground hover:bg-primary-hover" onClick={handleFeedback}>Submit</Button>
                   </div>
                 </div>
               )}

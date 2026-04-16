@@ -1,7 +1,8 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import {
   Course, LiveClass, Article, Payment, Note, Testimonial,
-  Enquiry, ArticleRequest, SupportTicket, CourseReview
+  Enquiry, ArticleRequest, SupportTicket, CourseReview,
+  Enrollment, LectureProgress
 } from '@/data/types';
 import {
   courses as initialCourses, liveClasses as initialClasses, articles as initialArticles,
@@ -21,6 +22,8 @@ interface DataContextType {
   articleRequests: ArticleRequest[];
   supportTickets: SupportTicket[];
   categories: string[];
+  enrollments: Enrollment[];
+  lectureProgress: LectureProgress[];
   addCourse: (course: Course) => Promise<void>;
   updateCourse: (id: string, course: Partial<Course>) => Promise<void>;
   deleteCourse: (id: string) => Promise<void>;
@@ -50,6 +53,11 @@ interface DataContextType {
   addCategory: (category: string) => void;
   updateCategory: (oldCategory: string, newCategory: string) => void;
   deleteCategory: (category: string) => void;
+  enrollCourse: (userId: string, courseId: string) => Promise<void>;
+  updateProgress: (userId: string, courseId: string, lectureId: string, completed: boolean, watchTime?: number) => Promise<void>;
+  getCourseProgress: (userId: string, courseId: string) => number;
+  getEnrolledCourses: (userId: string) => Course[];
+  isEnrolled: (userId: string, courseId: string) => boolean;
 }
 
 const DataContext = createContext<DataContextType | undefined>(undefined);
@@ -65,6 +73,8 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
   const [articleRequests, setArticleRequests] = useState<ArticleRequest[]>(initialArticleRequests);
   const [supportTickets, setSupportTickets] = useState<SupportTicket[]>(initialSupportTickets);
   const [categories, setCategories] = useState<string[]>(initialCategories);
+  const [enrollments, setEnrollments] = useState<Enrollment[]>([]);
+  const [lectureProgress, setLectureProgress] = useState<LectureProgress[]>([]);
 
   // Fetch courses from API on mount
   useEffect(() => {
@@ -127,6 +137,46 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       }
     };
     fetchCategories();
+  }, []);
+
+  // Fetch user enrollments from database when user is logged in
+  useEffect(() => {
+    const fetchUserEnrollments = async (userId: string) => {
+      try {
+        const response = await fetch(`/api/user/enrollments?userId=${userId}`);
+        if (response.ok) {
+          const data = await response.json();
+          if (data.success && data.enrollments) {
+            setEnrollments(data.enrollments.map((e: any) => ({
+              id: e._id?.toString() || e.id,
+              userId: e.userId?.toString() || e.userId,
+              courseId: e.courseId?.toString() || e.courseId,
+              paymentStatus: e.paymentStatus || 'success',
+              progress: e.progress || 0,
+              enrolledAt: e.enrolledAt || new Date().toISOString(),
+              lastAccessedAt: e.lastAccessedAt || new Date().toISOString(),
+            })));
+          }
+        }
+      } catch (error) {
+        console.error('Failed to fetch user enrollments:', error);
+      }
+    };
+
+    // Get user from localStorage
+    if (typeof window !== 'undefined') {
+      const storedUser = localStorage.getItem('erudition-user');
+      if (storedUser) {
+        try {
+          const user = JSON.parse(storedUser);
+          if (user.id) {
+            fetchUserEnrollments(user.id);
+          }
+        } catch (error) {
+          console.error('Failed to parse user from localStorage:', error);
+        }
+      }
+    }
   }, []);
 
   const addCourse = async (c: Course) => {
@@ -270,10 +320,106 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
+  const enrollCourse = async (userId: string, courseId: string) => {
+    try {
+      const res = await fetch('/api/enroll', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId, courseId }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setEnrollments(prev => [...prev, {
+          id: `enr-${Date.now()}`,
+          userId,
+          courseId,
+          paymentStatus: 'success',
+          progress: 0,
+          enrolledAt: new Date().toISOString(),
+          lastAccessedAt: new Date().toISOString(),
+        }]);
+      } else {
+        throw new Error(data.message || 'Failed to enroll');
+      }
+    } catch (error) {
+      console.error('Failed to enroll:', error);
+      throw error;
+    }
+  };
+
+  const updateProgress = async (userId: string, courseId: string, lectureId: string, completed: boolean, watchTime: number = 0) => {
+    try {
+      const existingProgress = lectureProgress.find(
+        lp => lp.userId === userId && lp.lectureId === lectureId
+      );
+      
+      const progressData: LectureProgress = existingProgress ? {
+        ...existingProgress,
+        completed,
+        watchTime,
+        completedAt: completed ? new Date().toISOString() : existingProgress.completedAt,
+      } : {
+        id: `lp-${Date.now()}`,
+        userId,
+        lectureId,
+        courseId,
+        completed,
+        watchTime,
+        completedAt: completed ? new Date().toISOString() : undefined,
+      };
+
+      await fetch('/api/enrollment/progress', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId, courseId, lectureId, completed }),
+      });
+
+      setLectureProgress(prev => {
+        const filtered = prev.filter(lp => !(lp.userId === userId && lp.lectureId === lectureId));
+        return [...filtered, progressData];
+      });
+
+      const course = courses.find(c => c.id === courseId);
+      if (course && course.recordedLectures) {
+        const totalLectures = course.recordedLectures.length;
+        const completedLectures = lectureProgress.filter(
+          lp => lp.userId === userId && lp.courseId === courseId && lp.completed
+        ).length + (completed ? 1 : 0);
+        const newProgress = Math.round((completedLectures / totalLectures) * 100);
+        
+        setEnrollments(prev => prev.map(e => 
+          e.userId === userId && e.courseId === courseId 
+            ? { ...e, progress: newProgress, lastAccessedAt: new Date().toISOString() }
+            : e
+        ));
+      }
+    } catch (error) {
+      console.error('Failed to update progress:', error);
+      throw error;
+    }
+  };
+
+  const getCourseProgress = (userId: string, courseId: string): number => {
+    const enrollment = enrollments.find(e => e.userId === userId && e.courseId === courseId);
+    return enrollment?.progress || 0;
+  };
+
+  const getEnrolledCourses = (userId: string): Course[] => {
+    const enrolledCourseIds = enrollments
+      .filter(e => e.userId === userId)
+      .map(e => e.courseId);
+    return courses.filter(c => enrolledCourseIds.includes(c.id));
+  };
+
+  const isEnrolled = (userId: string, courseId: string): boolean => {
+    return enrollments.some(e => e.userId === userId && e.courseId === courseId);
+  };
+
   return (
     <DataContext.Provider value={{
       courses, liveClasses, articles, payments, notes, testimonials,
       enquiries, articleRequests, supportTickets, categories,
+      enrollments, lectureProgress,
       addCourse, updateCourse, deleteCourse, addCourseReview,
       addLiveClass: (c) => setLiveClasses(p => [...p, c]),
       updateLiveClass: (id, d) => setLiveClasses(p => p.map(c => c.id === id ? { ...c, ...d } : c)),
@@ -323,6 +469,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       addSupportMessage: (tId, m) => setSupportTickets(p => p.map(t => t.id === tId ? { ...t, messages: [...t.messages, m] } : t)),
       closeSupportTicket: (id) => setSupportTickets(p => p.map(t => t.id === id ? { ...t, status: 'closed' } : t)),
       addCategory, updateCategory, deleteCategory,
+      enrollCourse, updateProgress, getCourseProgress, getEnrolledCourses, isEnrolled,
     }}>
       {children}
     </DataContext.Provider>

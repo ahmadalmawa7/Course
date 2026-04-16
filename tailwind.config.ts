@@ -30,9 +30,13 @@ export default {
         },
         cream: "hsl(var(--cream))",
         charcoal: "hsl(var(--charcoal))",
+        footer: {
+          DEFAULT: "hsl(var(--footer-bg))",
+        },
         primary: {
           DEFAULT: "hsl(var(--primary))",
           foreground: "hsl(var(--primary-foreground))",
+          hover: "#B22222",
         },
         secondary: {
           DEFAULT: "hsl(var(--secondary))",
