@@ -12,16 +12,25 @@ const LoginPage = () => {
   const { login, adminLogin } = useAuth();
   const navigate = useNavigate();
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isAdminLogin) {
       const success = adminLogin(email, password);
-      if (success) { toast.success('Admin login successful'); navigate('/admin'); }
-      else toast.error('Invalid admin credentials');
-    } else {
-      login(email, password);
+      if (success) {
+        toast.success('Admin login successful');
+        navigate('/admin');
+      } else {
+        toast.error('Invalid admin credentials');
+      }
+      return;
+    }
+
+    const success = await login(email, password);
+    if (success) {
       toast.success('Login successful');
       navigate('/');
+    } else {
+      toast.error('Invalid email or password');
     }
   };
 

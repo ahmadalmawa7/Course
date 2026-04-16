@@ -34,12 +34,17 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     return localStorage.getItem('erudition-admin') === 'true';
   });
 
+  const normalizeEmail = (value: string) => value.trim().toLowerCase();
+  const normalizePassword = (value: string) => value.trim();
+
   const login = async (email: string, password: string) => {
+    const normalizedEmail = normalizeEmail(email);
+    const normalizedPassword = normalizePassword(password);
     try {
       const res = await fetch('/api/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ email: normalizedEmail, password: normalizedPassword }),
       });
       const data = await res.json();
       if (res.ok && data.success) {
@@ -47,9 +52,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         setIsAdmin(false);
         return true;
       }
+      console.error('Login failed:', data.message);
       return false;
     } catch (error) {
-      console.error(error);
+      console.error('Login request error:', error);
       return false;
     }
   };
@@ -72,11 +78,13 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const register = async (name: string, email: string, password: string) => {
+    const normalizedEmail = normalizeEmail(email);
+    const normalizedPassword = normalizePassword(password);
     try {
       const res = await fetch('/api/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, email, password }),
+        body: JSON.stringify({ name: name.trim(), email: normalizedEmail, password: normalizedPassword }),
       });
       const data = await res.json();
       if (res.ok && data.success) {
@@ -84,9 +92,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         setIsAdmin(false);
         return true;
       }
+      console.error('Registration failed:', data.message);
       return false;
     } catch (error) {
-      console.error(error);
+      console.error('Registration request error:', error);
       return false;
     }
   };

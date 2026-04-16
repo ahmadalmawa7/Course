@@ -12,11 +12,15 @@ const RegisterPage = () => {
   const { register } = useAuth();
   const navigate = useNavigate();
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    register(name, email, password);
-    toast.success('Registration successful! Welcome to Erudition Infinite.');
-    navigate('/');
+    const success = await register(name, email, password);
+    if (success) {
+      toast.success('Registration successful! Welcome to Erudition Infinite.');
+      navigate('/');
+    } else {
+      toast.error('Registration failed. Please check your details and try again.');
+    }
   };
 
   return (
