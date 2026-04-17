@@ -11,7 +11,7 @@ interface AuthContextType {
   logout: () => void;
   enrollInCourse: (courseId: string) => Promise<void>;
   updateProgress: (courseId: string, progress: number) => Promise<void>;
-  updateProfile: (data: Partial<User>) => void;
+  updateProfile: (data: Partial<User>) => Promise<boolean>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -23,7 +23,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     if (!stored) return null;
 
     try {
-      return JSON.parse(stored) as User;
+      const parsed = JSON.parse(stored) as any;
+      if (parsed?._id && !parsed.id) {
+        parsed.id = parsed._id?.toString();
+        delete parsed._id;
+      }
+      return parsed as User;
     } catch {
       localStorage.removeItem('erudition-user');
       return null;
@@ -150,8 +155,27 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
-  const updateProfile = (data: Partial<User>) => {
-    if (user) setUser({ ...user, ...data });
+  const updateProfile = async (data: Partial<User>) => {
+    if (!user) return;
+
+    try {
+      const res = await fetch('/api/user/update', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: user.id, ...data }),
+      });
+      const result = await res.json();
+      if (res.ok && result.success) {
+        setUser(result.user);
+        return true;
+      } else {
+        console.error('Failed to update profile:', result.message);
+        return false;
+      }
+    } catch (error) {
+      console.error('Error updating profile:', error);
+      return false;
+    }
   };
 
   React.useEffect(() => {

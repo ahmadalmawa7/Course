@@ -1,8 +1,9 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { useAuth } from '@/contexts/AuthContext';
 import {
   Course, LiveClass, Article, Payment, Note, Testimonial,
   Enquiry, ArticleRequest, SupportTicket, CourseReview,
-  Enrollment, LectureProgress
+  Enrollment, LectureProgress, ArticleComment
 } from '@/data/types';
 import {
   courses as initialCourses, liveClasses as initialClasses, articles as initialArticles,
@@ -34,10 +35,11 @@ interface DataContextType {
   addArticle: (article: Article) => void;
   updateArticle: (id: string, article: Partial<Article>) => void;
   deleteArticle: (id: string) => void;
+  refetchArticles: () => Promise<void>;
   addPayment: (payment: Payment) => void;
   deleteComment: (articleId: string, commentId: string) => void;
   replyToComment: (articleId: string, commentId: string, reply: string) => void;
-  addComment: (articleId: string, comment: { id: string; user: string; text: string; date: string }) => void;
+  addComment: (articleId: string, comment: ArticleComment) => void;
   addNote: (note: Note) => void;
   deleteNote: (id: string) => void;
   addTestimonial: (t: Testimonial) => void;
@@ -54,6 +56,7 @@ interface DataContextType {
   updateCategory: (oldCategory: string, newCategory: string) => void;
   deleteCategory: (category: string) => void;
   enrollCourse: (userId: string, courseId: string) => Promise<void>;
+  refetchUserEnrollments: (userId: string) => Promise<void>;
   updateProgress: (userId: string, courseId: string, lectureId: string, completed: boolean, watchTime?: number) => Promise<void>;
   getCourseProgress: (userId: string, courseId: string) => number;
   getEnrolledCourses: (userId: string) => Course[];
@@ -139,45 +142,63 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
     fetchCategories();
   }, []);
 
-  // Fetch user enrollments from database when user is logged in
+  // Fetch articles from API on mount
   useEffect(() => {
-    const fetchUserEnrollments = async (userId: string) => {
+    const fetchArticles = async () => {
       try {
-        const response = await fetch(`/api/user/enrollments?userId=${userId}`);
+        const response = await fetch('/api/articles');
         if (response.ok) {
           const data = await response.json();
-          if (data.success && data.enrollments) {
-            setEnrollments(data.enrollments.map((e: any) => ({
-              id: e._id?.toString() || e.id,
-              userId: e.userId?.toString() || e.userId,
-              courseId: e.courseId?.toString() || e.courseId,
-              paymentStatus: e.paymentStatus || 'success',
-              progress: e.progress || 0,
-              enrolledAt: e.enrolledAt || new Date().toISOString(),
-              lastAccessedAt: e.lastAccessedAt || new Date().toISOString(),
+          if (Array.isArray(data) && data.length > 0) {
+            setArticles(data.map((item: any) => ({
+              ...item,
+              id: item.id || item._id?.toString(),
+              comments: item.comments || [],
+              likes: item.likes || [],
             })));
           }
         }
       } catch (error) {
-        console.error('Failed to fetch user enrollments:', error);
+        console.error('Failed to fetch articles:', error);
       }
     };
+    fetchArticles();
+  }, []);
 
-    // Get user from localStorage
-    if (typeof window !== 'undefined') {
-      const storedUser = localStorage.getItem('erudition-user');
-      if (storedUser) {
-        try {
-          const user = JSON.parse(storedUser);
-          if (user.id) {
-            fetchUserEnrollments(user.id);
-          }
-        } catch (error) {
-          console.error('Failed to parse user from localStorage:', error);
+  const { user } = useAuth();
+
+  const refetchUserEnrollments = async (userId: string) => {
+    try {
+      const response = await fetch(`/api/user/enrollments?userId=${userId}`);
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success && data.enrollments) {
+          setEnrollments(data.enrollments.map((e: any) => ({
+            id: e._id?.toString() || e.id,
+            userId: e.userId?.toString() || e.userId,
+            courseId: e.courseId?.toString() || e.courseId,
+            paymentStatus: e.paymentStatus || 'success',
+            progress: e.progress || 0,
+            enrolledAt: e.enrolledAt || new Date().toISOString(),
+            lastAccessedAt: e.lastAccessedAt || new Date().toISOString(),
+          })));
         }
       }
+    } catch (error) {
+      console.error('Failed to fetch user enrollments:', error);
     }
-  }, []);
+  };
+
+  // Fetch user enrollments from database whenever the authenticated user changes
+  useEffect(() => {
+    if (!user?.id) {
+      setEnrollments([]);
+      setLectureProgress([]);
+      return;
+    }
+
+    refetchUserEnrollments(user.id);
+  }, [user?.id]);
 
   const addCourse = async (c: Course) => {
     try {
@@ -338,6 +359,8 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
           enrolledAt: new Date().toISOString(),
           lastAccessedAt: new Date().toISOString(),
         }]);
+        // Refetch to sync with backend
+        setTimeout(() => refetchUserEnrollments(userId), 500);
       } else {
         throw new Error(data.message || 'Failed to enroll');
       }
@@ -405,6 +428,12 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const getEnrolledCourses = (userId: string): Course[] => {
+    // Use auth user's enrolledCourses as primary source (updated immediately on enrollment)
+    if (user?.id === userId && user?.enrolledCourses) {
+      return courses.filter(c => user.enrolledCourses.includes(c.id));
+    }
+
+    // Fallback to DataContext enrollments for other users
     const enrolledCourseIds = enrollments
       .filter(e => e.userId === userId)
       .map(e => e.courseId);
@@ -412,7 +441,16 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const isEnrolled = (userId: string, courseId: string): boolean => {
-    return enrollments.some(e => e.userId === userId && e.courseId === courseId);
+    // Check DataContext enrollments
+    const hasEnrollment = enrollments.some(e => e.userId === userId && e.courseId === courseId);
+    if (hasEnrollment) return true;
+
+    // Also check auth user's enrolledCourses for immediate feedback after enrollment
+    if (user?.id === userId && user?.enrolledCourses?.includes(courseId)) {
+      return true;
+    }
+
+    return false;
   };
 
   return (
@@ -427,6 +465,24 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       addArticle: (a) => setArticles(p => [...p, a]),
       updateArticle: (id, d) => setArticles(p => p.map(a => a.id === id ? { ...a, ...d } : a)),
       deleteArticle: (id) => setArticles(p => p.filter(a => a.id !== id)),
+      refetchArticles: async () => {
+        try {
+          const response = await fetch('/api/articles');
+          if (response.ok) {
+            const data = await response.json();
+            if (Array.isArray(data) && data.length > 0) {
+              setArticles(data.map((item: any) => ({
+                ...item,
+                id: item.id || item._id?.toString(),
+                comments: item.comments || [],
+                likes: item.likes || [],
+              })));
+            }
+          }
+        } catch (error) {
+          console.error('Failed to refetch articles:', error);
+        }
+      },
       addPayment: (p) => setPayments(prev => [...prev, p]),
       deleteComment: (aId, cId) => setArticles(p => p.map(a => a.id === aId ? { ...a, comments: a.comments.filter(c => c.id !== cId) } : a)),
       replyToComment: (aId, cId, r) => setArticles(p => p.map(a => a.id === aId ? { ...a, comments: a.comments.map(c => c.id === cId ? { ...c, reply: r } : c) } : a)),
@@ -469,7 +525,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       addSupportMessage: (tId, m) => setSupportTickets(p => p.map(t => t.id === tId ? { ...t, messages: [...t.messages, m] } : t)),
       closeSupportTicket: (id) => setSupportTickets(p => p.map(t => t.id === id ? { ...t, status: 'closed' } : t)),
       addCategory, updateCategory, deleteCategory,
-      enrollCourse, updateProgress, getCourseProgress, getEnrolledCourses, isEnrolled,
+      enrollCourse, refetchUserEnrollments, updateProgress, getCourseProgress, getEnrolledCourses, isEnrolled,
     }}>
       {children}
     </DataContext.Provider>

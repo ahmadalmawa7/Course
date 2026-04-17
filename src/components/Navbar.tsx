@@ -31,7 +31,10 @@ const Navbar = () => {
         <Link to="/" className="flex items-center gap-3">
           <img src="/Logo.png" alt="Erudition Infinite Logo" className="h-12 w-auto" />
           <div className="flex flex-col">
-            <span className="font-serif text-xl font-bold leading-tight text-[#b30000]">ERUDITION INFINITE</span>
+            <div className="flex items-start gap-0.5">
+              <span className="font-serif text-xl font-bold leading-tight text-[#b30000]">ERUDITION INFINITE</span>
+              <span className="font-serif text-xs font-bold text-black leading-none">®</span>
+            </div>
             <span className="text-xs italic text-[#777]">Integrating talent, thought and action.</span>
           </div>
         </Link>

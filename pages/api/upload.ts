@@ -49,10 +49,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         return res.status(400).json({ error: 'Invalid file type. Only JPEG, PNG, GIF, and WebP are allowed.' });
       }
 
-      // Generate a unique filename
+      // Generate a unique filename based on type
+      const type = (fields.type?.[0] as string) || 'course';
       const timestamp = Date.now();
       const ext = path.extname(file.originalFilename || 'image.jpg');
-      const filename = `course-${timestamp}${ext}`;
+      const filename = `${type}-${timestamp}${ext}`;
       const newPath = path.join(uploadDir, filename);
 
       // Rename the file

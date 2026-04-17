@@ -68,6 +68,15 @@ export interface LiveClass {
   description: string;
 }
 
+export interface ArticleComment {
+  id: string;
+  userId: string;
+  userName: string;
+  text: string;
+  date: string;
+  createdAt?: string;
+}
+
 export interface Article {
   id: string;
   title: string;
@@ -78,7 +87,8 @@ export interface Article {
   category: string;
   readTime: string;
   image: string;
-  comments: { id: string; user: string; text: string; date: string; reply?: string }[];
+  comments: ArticleComment[];
+  likes: string[]; // Array of user IDs who liked the article
 }
 
 export interface User {
@@ -91,6 +101,7 @@ export interface User {
   completedCourses: string[];
   progress: Record<string, number>;
   certificates: Certificate[];
+  role?: string; // 'admin' or 'user'
 }
 
 export interface Certificate {

@@ -2,7 +2,7 @@ import type { NextApiRequest, NextApiResponse } from 'next';
 import { MongoClient, ObjectId } from 'mongodb';
 
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017';
-const DB_NAME = process.env.DB_NAME || 'erudition';
+const DB_NAME = process.env.DB_NAME;
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') {
@@ -19,7 +19,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   try {
     await client.connect();
-    const db = client.db(DB_NAME);
+    const db = DB_NAME ? client.db(DB_NAME) : client.db();
 
     // Check if user exists
     const user = await db.collection('users').findOne({ _id: new ObjectId(userId) });

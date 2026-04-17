@@ -14,8 +14,8 @@ type Tab = typeof TABS[number];
 
 const CourseLearningPage = () => {
   const { id } = useParams();
-  const { user } = useAuth();
-  const { courses, enrollCourse, updateProgress, getCourseProgress, isEnrolled, lectureProgress } = useData();
+  const { user, enrollInCourse } = useAuth();
+  const { courses, updateProgress, getCourseProgress, isEnrolled, lectureProgress } = useData();
   const navigate = useNavigate();
   
   const [activeTab, setActiveTab] = useState<Tab>('Lectures');
@@ -58,7 +58,7 @@ const CourseLearningPage = () => {
   const handleEnroll = async () => {
     if (!user || !id) return;
     try {
-      await enrollCourse(user.id, id);
+      await enrollInCourse(id);
       toast.success('Enrolled Successfully 🎉');
     } catch (error) {
       toast.error('Failed to enroll');

@@ -39,12 +39,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse<
   const result = await users.insertOne(newUser);
   const saved = await users.findOne({ _id: result.insertedId }, { projection: { password: 0 } });
 
+  const { password: _pwd, _id, ...savedRest } = saved as any;
   const userWithoutPassword = {
+    id: _id?.toString(),
     enrolledCourses: [],
     completedCourses: [],
     progress: {},
     certificates: [],
-    ...saved,
+    ...savedRest,
   };
 
   // Send welcome email

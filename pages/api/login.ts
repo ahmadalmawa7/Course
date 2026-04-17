@@ -42,13 +42,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse<
   //   return res.status(401).json({ success: false, message: 'Invalid credentials' });
   // }
 
-  const { password: _pwd, ...rawUser } = user as any;
+  const { password: _pwd, _id, ...rest } = user as any;
   const userWithoutPassword = {
+    id: _id?.toString(),
     enrolledCourses: [],
     completedCourses: [],
     progress: {},
     certificates: [],
-    ...rawUser,
+    ...rest,
   };
 
   return res.status(200).json({ success: true, message: 'Login successful', user: userWithoutPassword });

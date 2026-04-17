@@ -1,13 +1,28 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useData } from '@/contexts/DataContext';
-import { Clock, Star, Users, BookOpen } from 'lucide-react';
+import { Clock, Star, Users, BookOpen, Search } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 
 const CoursesPage = () => {
   const { courses, categories } = useData();
   const [activeCategory, setActiveCategory] = useState('All');
-  const filtered = activeCategory === 'All' ? courses : courses.filter((c) => c.category === activeCategory);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [debouncedQuery, setDebouncedQuery] = useState('');
+
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedQuery(searchQuery), 300);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
+
+  const filteredBySearch = courses.filter(course =>
+    course.title.toLowerCase().includes(debouncedQuery.toLowerCase()) ||
+    course.category.toLowerCase().includes(debouncedQuery.toLowerCase()) ||
+    course.description.toLowerCase().includes(debouncedQuery.toLowerCase())
+  );
+
+  const filtered = activeCategory === 'All' ? filteredBySearch : filteredBySearch.filter((c) => c.category === activeCategory);
 
   return (
     <div>
@@ -21,6 +36,18 @@ const CoursesPage = () => {
 
       <section className="py-12">
         <div className="container mx-auto px-4">
+          {/* Search Bar */}
+          <div className="relative mb-8 max-w-md mx-auto">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              type="text"
+              placeholder="Search courses..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-10"
+            />
+          </div>
+
           {/* Category Filters */}
           <div className="mb-8 flex flex-wrap gap-2">
             {categories.map((cat) => (
@@ -37,8 +64,13 @@ const CoursesPage = () => {
           </div>
 
           {/* Course Grid */}
-          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-            {filtered.map((course) => (
+          {filtered.length === 0 ? (
+            <div className="text-center py-12">
+              <p className="text-muted-foreground">No courses found matching your search.</p>
+            </div>
+          ) : (
+            <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+              {filtered.map((course) => (
               <Link key={course.id} to={`/courses/${course.id}`} className="group">
                 <div className="h-full rounded-lg border border-border bg-card p-6 transition-all hover:border-gold/50 hover:shadow-lg">
                   <div className="mb-4 h-40 overflow-hidden rounded-lg bg-slate-100">
@@ -69,6 +101,7 @@ const CoursesPage = () => {
               </Link>
             ))}
           </div>
+          )}
         </div>
       </section>
     </div>

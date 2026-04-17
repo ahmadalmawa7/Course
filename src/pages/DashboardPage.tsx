@@ -1,9 +1,11 @@
 import { useAuth } from '@/contexts/AuthContext';
 import { useData } from '@/contexts/DataContext';
 import { Link, Navigate } from 'react-router-dom';
-import { BookOpen, Calendar, Award, Clock, Download, User, TrendingUp } from 'lucide-react';
+import { BookOpen, Calendar, Award, Clock, Download, User, TrendingUp, Search } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { toast } from 'sonner';
+import { useState, useEffect } from 'react';
 
 const DashboardPage = () => {
   const { user } = useAuth();
@@ -13,6 +15,19 @@ const DashboardPage = () => {
   const enrolledCourses = courses.filter((c) => user.enrolledCourses?.includes(c.id) ?? false);
   const upcomingClasses = liveClasses.filter((lc) => user.enrolledCourses?.includes(lc.courseId) ?? false);
   const completedCourses = user.completedCourses ?? [];
+
+  const [searchQuery, setSearchQuery] = useState('');
+  const [debouncedQuery, setDebouncedQuery] = useState('');
+
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedQuery(searchQuery), 300);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
+
+  const filteredEnrolled = enrolledCourses.filter(course =>
+    course.title.toLowerCase().includes(debouncedQuery.toLowerCase()) ||
+    course.description.toLowerCase().includes(debouncedQuery.toLowerCase())
+  );
 
   const handleDownloadCertificate = (cert: typeof user.certificates[0]) => {
     // Mock PDF download
@@ -78,15 +93,25 @@ Integrating Talent, Thought & Action
           </div>
 
           {/* Enrolled Courses */}
+          <div className="relative mb-6 max-w-md">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              type="text"
+              placeholder="Search my courses..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-10"
+            />
+          </div>
           <h2 className="mb-4 font-heading text-xl font-bold text-foreground">My Courses</h2>
-          {enrolledCourses.length === 0 ? (
+          {filteredEnrolled.length === 0 ? (
             <div className="rounded-lg border border-border bg-card p-8 text-center">
-              <p className="text-muted-foreground mb-4">No courses enrolled yet.</p>
+              <p className="text-muted-foreground mb-4">No courses found matching your search.</p>
               <Link to="/courses"><Button className="bg-primary text-primary-foreground">Browse Courses</Button></Link>
             </div>
           ) : (
             <div className="mb-8 grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-              {enrolledCourses.map((course) => {
+              {filteredEnrolled.map((course) => {
                 const progress = user.progress[course.id] || 0;
                 return (
                   <div key={course.id} className="rounded-lg border border-border bg-card p-5">

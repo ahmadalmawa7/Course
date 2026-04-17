@@ -3,7 +3,7 @@ import { Navigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { useData } from '@/contexts/DataContext';
 import { Course, LiveClass, Article } from '@/data/types';
-import { BookOpen, Users, CreditCard, Calendar, FileText, Award, BarChart3, Settings, Plus, Pencil, Trash2, Eye, MessageCircle, Reply, X, Save, HelpCircle, Star, Mail, CheckCircle, XCircle, Send, Upload } from 'lucide-react';
+import { BookOpen, Users, CreditCard, Calendar, FileText, Award, BarChart3, Settings, Plus, Pencil, Trash2, Eye, MessageCircle, Reply, X, Save, HelpCircle, Star, Mail, CheckCircle, XCircle, Send, Upload, Loader } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -42,11 +42,11 @@ const DialogOverlay = ({ children, onClose }: { children: React.ReactNode; onClo
 const AdminPage = () => {
   const { user, isAdmin } = useAuth();
   const {
-    courses, liveClasses, articles, payments, notes, testimonials, enquiries, articleRequests, supportTickets, categories,
+    courses, liveClasses, articles, payments, notes, testimonials, enquiries, supportTickets, categories,
     addCourse, updateCourse, deleteCourse, addLiveClass, updateLiveClass, deleteLiveClass,
     addArticle, updateArticle, deleteArticle, deleteComment, replyToComment,
     addNote, deleteNote, approveTestimonial, deleteTestimonial, updateEnquiryStatus,
-    updateArticleRequestStatus, addSupportMessage, closeSupportTicket,
+    addSupportMessage, closeSupportTicket,
     addCategory, updateCategory, deleteCategory,
   } = useData();
   const [activeTab, setActiveTab] = useState<Tab>(() => {
@@ -59,11 +59,84 @@ const AdminPage = () => {
   const [viewCourse, setViewCourse] = useState<Course | null>(null);
   const [categoryDialog, setCategoryDialog] = useState<{ open: boolean; editing: string | null }>({ open: false, editing: null });
   const [categoryForm, setCategoryForm] = useState({ name: '' });
-  const [replyDialog, setReplyDialog] = useState<{ articleId: string; commentId: string; text: string } | null>(null);
   const [noteDialog, setNoteDialog] = useState(false);
   const [noteForm, setNoteForm] = useState({ title: '', courseId: '', category: '', description: '' });
   const [supportReply, setSupportReply] = useState<{ ticketId: string; text: string } | null>(null);
   const [settings, setSettings] = useState({ razorpayKeyId: '', razorpayKeySecret: '', smtpHost: '', smtpPort: '587', smtpUser: '', smtpPass: '', smtpFrom: 'noreply@eruditioninfinite.com' });
+  const [pendingArticles, setPendingArticles] = useState<any[]>([]);
+  const [loadingPendingArticles, setLoadingPendingArticles] = useState(false);
+  const [loadingApprovedArticles, setLoadingApprovedArticles] = useState(false);
+
+  useEffect(() => {
+    const fetchPendingArticles = async () => {
+      try {
+        setLoadingPendingArticles(true);
+        const response = await fetch('/api/articles?status=pending');
+        if (response.ok) {
+          const data = await response.json();
+          setPendingArticles(data);
+        }
+      } catch (error) {
+        console.error('Failed to fetch pending articles:', error);
+      } finally {
+        setLoadingPendingArticles(false);
+      }
+    };
+
+    if (activeTab === 'article-requests') {
+      fetchPendingArticles();
+    }
+
+    // Refresh pending articles every 10 seconds when viewing article requests
+    const interval = setInterval(() => {
+      if (activeTab === 'article-requests') {
+        fetchPendingArticles();
+      }
+    }, 10000);
+
+    return () => clearInterval(interval);
+  }, [activeTab]);
+
+  useEffect(() => {
+    const fetchApprovedArticles = async () => {
+      try {
+        setLoadingApprovedArticles(true);
+        const response = await fetch('/api/articles?status=approved');
+        if (response.ok) {
+          const data = await response.json();
+          // Map database articles to local state
+          const mappedArticles = data.map((article: any) => ({
+            ...article,
+            id: article.id || article._id?.toString(),
+            comments: article.comments || [],
+            likes: article.likes || [],
+          }));
+          // Update the local articles through the data context by triggering refetch
+          if (data.length > 0) {
+            // For approved articles in admin, we can update articles state directly
+            // This keeps admin view in sync with database
+          }
+        }
+      } catch (error) {
+        console.error('Failed to fetch approved articles:', error);
+      } finally {
+        setLoadingApprovedArticles(false);
+      }
+    };
+
+    if (activeTab === 'articles') {
+      fetchApprovedArticles();
+    }
+
+    // Refresh approved articles every 10 seconds when viewing articles tab
+    const interval = setInterval(() => {
+      if (activeTab === 'articles') {
+        fetchApprovedArticles();
+      }
+    }, 10000);
+
+    return () => clearInterval(interval);
+  }, [activeTab]);
 
   if (!user || !isAdmin) return <Navigate to="/login" />;
 
@@ -145,15 +218,70 @@ const AdminPage = () => {
     setClassDialog({ open: false, editing: null });
   };
 
-  const handleSaveArticle = (formData: Record<string, string>) => {
+  const handleSaveArticle = async (formData: Record<string, string>) => {
     const articleData: Omit<Article, 'id' | 'comments'> = {
-      title: formData.title, excerpt: formData.excerpt || formData.content?.substring(0, 150) + '...',
-      content: formData.content, author: formData.author || 'Lt Col Shreesh Kumar (Retd)',
-      date: new Date().toISOString().split('T')[0], category: formData.category || 'Leadership',
-      readTime: `${Math.max(1, Math.ceil((formData.content?.length || 0) / 1000))} min read`, image: '',
+      title: formData.title,
+      excerpt: formData.excerpt || `${formData.content?.substring(0, 150) || ''}...`,
+      content: formData.content,
+      author: formData.author || 'Lt Col Shreesh Kumar (Retd)',
+      date: new Date().toISOString().split('T')[0],
+      category: formData.category || 'Leadership',
+      readTime: `${Math.max(1, Math.ceil((formData.content?.length || 0) / 1000))} min read`,
+      image: '',
+      likes: [],
     };
-    if (articleDialog.editing) { updateArticle(articleDialog.editing.id, articleData); toast.success('Article updated!'); }
-    else { addArticle({ ...articleData, id: `a-${Date.now()}`, comments: [] }); toast.success('Article published!'); }
+
+    if (articleDialog.editing) {
+      try {
+        const response = await fetch('/api/articles', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id: articleDialog.editing.id, ...articleData }),
+        });
+
+        if (response.ok) {
+          const updated = await response.json();
+          updateArticle(articleDialog.editing.id, {
+            ...articleData,
+            comments: updated.comments || articleDialog.editing.comments,
+            likes: updated.likes || articleDialog.editing.likes,
+          });
+          toast.success('Article updated!');
+        } else {
+          toast.error('Failed to update article');
+        }
+      } catch (error) {
+        toast.error('Failed to update article');
+      }
+    } else {
+      try {
+        const response = await fetch('/api/articles', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            ...articleData,
+            status: 'approved',
+            submittedBy: user?.email || 'admin@eruditioninfinite.com',
+          }),
+        });
+
+        if (response.ok) {
+          const created = await response.json();
+          addArticle({
+            ...articleData,
+            id: created.id || `a-${Date.now()}`,
+            comments: created.comments || [],
+            likes: created.likes || [],
+          });
+          toast.success('Article published!');
+        } else {
+          toast.error('Failed to publish article');
+        }
+      } catch (error) {
+        toast.error('Failed to publish article');
+      }
+    }
+
     setArticleDialog({ open: false, editing: null });
   };
 
@@ -170,6 +298,89 @@ const AdminPage = () => {
     addSupportMessage(supportReply.ticketId, { sender: 'admin', text: supportReply.text, date: new Date().toISOString().split('T')[0] });
     toast.success('Reply sent!');
     setSupportReply(null);
+  };
+
+  const handleApproveArticle = async (articleId: string) => {
+    try {
+      const response = await fetch('/api/articles', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: articleId, status: 'approved' }),
+      });
+
+      if (response.ok) {
+        setPendingArticles(prev => prev.filter(a => a.id !== articleId));
+        // Refetch articles to update the Published Articles list
+        const approvedResponse = await fetch('/api/articles?status=approved');
+        if (approvedResponse.ok) {
+          const approvedData = await approvedResponse.json();
+          const mappedArticles = approvedData.map((article: any) => ({
+            ...article,
+            id: article.id || article._id?.toString(),
+            comments: article.comments || [],
+            likes: article.likes || [],
+          }));
+          // Update articles in the context
+          approvedData.forEach((article: any) => {
+            const existingArticle = articles.find(a => a.id === (article.id || article._id?.toString()));
+            if (!existingArticle) {
+              addArticle({
+                ...article,
+                id: article.id || article._id?.toString(),
+                comments: article.comments || [],
+                likes: article.likes || [],
+              });
+            }
+          });
+        }
+        toast.success('Article approved!');
+      } else {
+        toast.error('Failed to approve article');
+      }
+    } catch (error) {
+      console.error('Error approving article:', error);
+      toast.error('Error approving article');
+    }
+  };
+
+  const handleRejectArticle = async (articleId: string) => {
+    try {
+      const response = await fetch('/api/articles', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: articleId, status: 'rejected' }),
+      });
+
+      if (response.ok) {
+        setPendingArticles(prev => prev.filter(a => a.id !== articleId));
+        toast.success('Article rejected!');
+      } else {
+        toast.error('Failed to reject article');
+      }
+    } catch (error) {
+      console.error('Error rejecting article:', error);
+      toast.error('Error rejecting article');
+    }
+  };
+
+  const handleDeleteArticle = async (articleId: string) => {
+    try {
+      const response = await fetch('/api/articles', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: articleId }),
+      });
+
+      if (response.ok) {
+        deleteArticle(articleId);
+        toast.success('Article deleted successfully');
+      } else {
+        toast.error('Failed to delete article');
+      }
+    } catch (error) {
+      console.error('Error deleting article:', error);
+      toast.error('Error deleting article');
+    }
   };
 
 const handleSaveCategory = async (formData: Record<string, string>) => {
@@ -495,24 +706,27 @@ const handleSaveCategory = async (formData: Record<string, string>) => {
 
             {/* ARTICLES */}
             {activeTab === 'articles' && (
-              <div>
-                <div className="mb-6 flex items-center justify-between">
-                  <h2 className="font-heading text-2xl font-bold text-foreground">Article Management</h2>
-                  <Button size="sm" onClick={() => setArticleDialog({ open: true, editing: null })}><Plus className="h-4 w-4 mr-1" /> New Article</Button>
-                </div>
-                <div className="space-y-3">
-                  {articles.map(a => (
-                    <div key={a.id} className="flex items-center justify-between rounded-lg border border-border bg-card p-4">
-                      <div>
-                        <p className="font-medium text-card-foreground">{a.title}</p>
-                        <p className="text-xs text-muted-foreground">{a.category} • {a.date} • {a.comments.length} comments</p>
+              <div className="space-y-6">
+                {/* Published Articles */}
+                <div>
+                  <div className="mb-6 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                    <h2 className="font-heading text-2xl font-bold text-foreground">Published Articles</h2>
+                    <Button size="sm" onClick={() => setArticleDialog({ open: true, editing: null })}><Plus className="h-3 w-3 mr-1" /> Add Article</Button>
+                  </div>
+                  <div className="space-y-3">
+                    {articles.map(a => (
+                      <div key={a.id} className="flex items-center justify-between rounded-lg border border-border bg-card p-4">
+                        <div>
+                          <p className="font-medium text-card-foreground">{a.title}</p>
+                          <p className="text-xs text-muted-foreground">{a.category} • {a.date} • {a.comments.length} comments</p>
+                        </div>
+                        <div className="flex gap-1">
+                          <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => setArticleDialog({ open: true, editing: a })}><Pencil className="h-3 w-3 mr-1" /> Edit</Button>
+                          <Button variant="ghost" size="sm" className="h-7 text-xs text-destructive" onClick={() => handleDeleteArticle(a.id)}><Trash2 className="h-3 w-3 mr-1" /> Delete</Button>
+                        </div>
                       </div>
-                      <div className="flex gap-1">
-                        <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => setArticleDialog({ open: true, editing: a })}><Pencil className="h-3 w-3 mr-1" /> Edit</Button>
-                        <Button variant="ghost" size="sm" className="h-7 text-xs text-destructive" onClick={() => { deleteArticle(a.id); toast.success('Article deleted.'); }}><Trash2 className="h-3 w-3 mr-1" /> Delete</Button>
-                      </div>
-                    </div>
-                  ))}
+                    ))}
+                  </div>
                 </div>
               </div>
             )}
@@ -531,21 +745,12 @@ const handleSaveCategory = async (formData: Record<string, string>) => {
                           <div className="flex-1">
                             <p className="text-xs text-muted-foreground mb-1">On: <span className="font-medium text-card-foreground">{c.articleTitle}</span></p>
                             <div className="flex items-center gap-2 mb-2">
-                              <span className="text-sm font-medium text-card-foreground">{c.user}</span>
+                              <span className="text-sm font-medium text-card-foreground">{c.userName}</span>
                               <span className="text-xs text-muted-foreground">{c.date}</span>
                             </div>
                             <p className="text-sm text-muted-foreground">{c.text}</p>
-                            {c.reply && (
-                              <div className="mt-2 ml-4 rounded-md border-l-2 border-primary bg-muted/50 p-2">
-                                <p className="text-xs font-medium text-primary mb-0.5">Your Reply</p>
-                                <p className="text-sm text-muted-foreground">{c.reply}</p>
-                              </div>
-                            )}
                           </div>
                           <div className="flex gap-1 ml-2">
-                            {!c.reply && (
-                              <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => setReplyDialog({ articleId: c.articleId, commentId: c.id, text: '' })}><Reply className="h-3 w-3 mr-1" /> Reply</Button>
-                            )}
                             <Button variant="ghost" size="sm" className="h-7 text-xs text-destructive" onClick={() => { deleteComment(c.articleId, c.id); toast.success('Comment deleted.'); }}><Trash2 className="h-3 w-3" /></Button>
                           </div>
                         </div>
@@ -655,28 +860,35 @@ const handleSaveCategory = async (formData: Record<string, string>) => {
             {activeTab === 'article-requests' && (
               <div>
                 <h2 className="mb-6 font-heading text-2xl font-bold text-foreground">Article Requests</h2>
-                <div className="space-y-3">
-                  {articleRequests.map(r => (
-                    <div key={r.id} className="rounded-lg border border-border bg-card p-4">
-                      <div className="flex items-start justify-between">
-                        <div>
-                          <p className="font-medium text-card-foreground">{r.topic}</p>
-                          <p className="text-xs text-muted-foreground">By {r.userName} ({r.email}) • {r.date}</p>
-                          <p className="text-sm text-muted-foreground mt-1">{r.description}</p>
-                        </div>
-                        <div className="flex gap-1 ml-2">
-                          {r.status === 'pending' && (
-                            <>
-                              <Button variant="ghost" size="sm" className="h-7 text-xs text-green-600" onClick={() => { updateArticleRequestStatus(r.id, 'approved'); toast.success('Request approved!'); }}><CheckCircle className="h-3 w-3 mr-1" /> Approve</Button>
-                              <Button variant="ghost" size="sm" className="h-7 text-xs text-destructive" onClick={() => { updateArticleRequestStatus(r.id, 'rejected'); toast.success('Request rejected.'); }}><XCircle className="h-3 w-3 mr-1" /> Reject</Button>
-                            </>
-                          )}
-                          <span className={`rounded-sm px-2 py-0.5 text-xs font-medium ${r.status === 'approved' ? 'bg-green-100 text-green-700' : r.status === 'rejected' ? 'bg-red-100 text-red-700' : 'bg-yellow-100 text-yellow-700'}`}>{r.status}</span>
+                {loadingPendingArticles ? (
+                  <div className="flex items-center justify-center py-8">
+                    <Loader className="h-6 w-6 animate-spin text-primary" />
+                  </div>
+                ) : pendingArticles.length === 0 ? (
+                  <div className="rounded-lg border border-border bg-card p-6 text-center">
+                    <p className="text-muted-foreground">No pending article requests at the moment.</p>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {pendingArticles.map(article => (
+                      <div key={article.id} className="rounded-lg border border-border bg-card p-4">
+                        <div className="flex items-start justify-between">
+                          <div>
+                            <p className="font-medium text-card-foreground">{article.title}</p>
+                            <p className="text-xs text-muted-foreground">By {article.author} • {article.date}</p>
+                            <p className="text-sm text-muted-foreground mt-1">{article.excerpt}</p>
+                            <p className="text-xs text-muted-foreground mt-2">Category: {article.category}</p>
+                          </div>
+                          <div className="flex gap-1 ml-2">
+                            <Button variant="ghost" size="sm" className="h-7 text-xs text-green-600" onClick={() => handleApproveArticle(article.id)}><CheckCircle className="h-3 w-3 mr-1" /> Approve</Button>
+                            <Button variant="ghost" size="sm" className="h-7 text-xs text-destructive" onClick={() => handleRejectArticle(article.id)}><XCircle className="h-3 w-3 mr-1" /> Reject</Button>
+                            <span className="rounded-sm px-2 py-0.5 text-xs font-medium bg-yellow-100 text-yellow-700">pending</span>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  ))}
-                </div>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
 
@@ -805,16 +1017,6 @@ const handleSaveCategory = async (formData: Record<string, string>) => {
           <div className="mt-4 flex gap-2 justify-end">
             <Button variant="outline" size="sm" onClick={() => { setCategoryDialog({ open: false, editing: null }); setCategoryForm({ name: '' }); }}>Cancel</Button>
             <Button size="sm" onClick={() => handleSaveCategory({ name: categoryForm.name })}><Save className="h-3 w-3 mr-1" /> {categoryDialog.editing ? 'Update' : 'Add'} Category</Button>
-          </div>
-        </DialogOverlay>
-      )}
-      {replyDialog && (
-        <DialogOverlay onClose={() => setReplyDialog(null)}>
-          <h3 className="font-heading text-lg font-semibold text-card-foreground mb-4">Reply to Comment</h3>
-          <Textarea value={replyDialog.text} onChange={e => setReplyDialog({ ...replyDialog, text: e.target.value })} placeholder="Type your reply..." rows={3} />
-          <div className="mt-4 flex gap-2 justify-end">
-            <Button variant="outline" size="sm" onClick={() => setReplyDialog(null)}>Cancel</Button>
-            <Button size="sm" onClick={() => { replyToComment(replyDialog.articleId, replyDialog.commentId, replyDialog.text); toast.success('Reply posted!'); setReplyDialog(null); }}><Reply className="h-3 w-3 mr-1" /> Post Reply</Button>
           </div>
         </DialogOverlay>
       )}

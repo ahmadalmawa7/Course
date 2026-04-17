@@ -1,8 +1,10 @@
 import { useAuth } from '@/contexts/AuthContext';
 import { useData } from '@/contexts/DataContext';
 import { Link, Navigate } from 'react-router-dom';
-import { BookOpen, Clock, Star, TrendingUp } from 'lucide-react';
+import { BookOpen, Clock, Star, TrendingUp, Search } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { useState, useEffect } from 'react';
 
 const MyCoursesPage = () => {
   const { user } = useAuth();
@@ -10,6 +12,19 @@ const MyCoursesPage = () => {
   if (!user) return <Navigate to="/login" />;
 
   const enrolledCourses = getEnrolledCourses(user.id);
+
+  const [searchQuery, setSearchQuery] = useState('');
+  const [debouncedQuery, setDebouncedQuery] = useState('');
+
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedQuery(searchQuery), 300);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
+
+  const filteredEnrolled = enrolledCourses.filter(course =>
+    course.title.toLowerCase().includes(debouncedQuery.toLowerCase()) ||
+    course.description.toLowerCase().includes(debouncedQuery.toLowerCase())
+  );
 
   return (
     <div>
@@ -23,15 +38,27 @@ const MyCoursesPage = () => {
 
       <section className="py-10">
         <div className="container mx-auto px-4">
-          {enrolledCourses.length === 0 ? (
+          {/* Search Bar */}
+          <div className="relative mb-8 max-w-md mx-auto">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              type="text"
+              placeholder="Search my courses..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-10"
+            />
+          </div>
+
+          {filteredEnrolled.length === 0 ? (
             <div className="rounded-lg border border-border bg-card p-12 text-center">
               <BookOpen className="mx-auto mb-3 h-10 w-10 text-muted-foreground" />
-              <p className="text-muted-foreground mb-4">You haven't enrolled in any courses yet.</p>
+              <p className="text-muted-foreground mb-4">No courses found matching your search.</p>
               <Link to="/courses"><Button className="bg-primary text-primary-foreground">Browse Courses</Button></Link>
             </div>
           ) : (
             <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-              {enrolledCourses.map(course => {
+              {filteredEnrolled.map(course => {
                 const progress = getCourseProgress(user.id, course.id);
                 const isCompleted = progress === 100;
                 return (

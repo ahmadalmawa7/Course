@@ -1,7 +1,7 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { Navigate } from 'react-router-dom';
-import { User, Mail, Phone, Camera, Save } from 'lucide-react';
+import { User, Mail, Phone, Camera, Save, Upload } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { toast } from 'sonner';
@@ -10,13 +10,53 @@ const ProfilePage = () => {
   const { user, updateProfile } = useAuth();
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState({ name: user?.name || '', email: user?.email || '', phone: user?.phone || '', profileImage: user?.profileImage || '' });
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   if (!user) return <Navigate to="/login" />;
 
-  const handleSave = () => {
-    updateProfile(form);
-    setEditing(false);
-    toast.success('Profile updated successfully!');
+  const handleFileUpload = async (file: File) => {
+    setUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('type', 'profile');
+
+      const res = await fetch('/api/upload', {
+        method: 'POST',
+        body: formData,
+      });
+
+      const data = await res.json();
+      if (res.ok) {
+        setForm({ ...form, profileImage: data.url });
+        toast.success('Image uploaded successfully!');
+      } else {
+        toast.error(data.error || 'Upload failed');
+      }
+    } catch (error) {
+      console.error('Upload error:', error);
+      toast.error('Upload failed');
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      handleFileUpload(file);
+    }
+  };
+
+  const handleSave = async () => {
+    const success = await updateProfile(form);
+    if (success) {
+      setEditing(false);
+      toast.success('Profile updated successfully!');
+    } else {
+      toast.error('Failed to update profile');
+    }
   };
 
   return (
@@ -64,8 +104,30 @@ const ProfilePage = () => {
               </div>
               {editing && (
                 <div>
-                  <label className="flex items-center gap-2 text-xs font-medium text-muted-foreground mb-1"><Camera className="h-3 w-3" /> Profile Image URL</label>
-                  <Input value={form.profileImage} onChange={e => setForm({ ...form, profileImage: e.target.value })} placeholder="https://..." />
+                  <label className="flex items-center gap-2 text-xs font-medium text-muted-foreground mb-1"><Camera className="h-3 w-3" /> Profile Image</label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="file"
+                      ref={fileInputRef}
+                      onChange={handleFileChange}
+                      accept="image/*"
+                      className="hidden"
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => fileInputRef.current?.click()}
+                      disabled={uploading}
+                      className="flex items-center gap-2"
+                    >
+                      <Upload className="h-3 w-3" />
+                      {uploading ? 'Uploading...' : 'Upload Image'}
+                    </Button>
+                    {form.profileImage && (
+                      <span className="text-xs text-muted-foreground">Image uploaded</span>
+                    )}
+                  </div>
                 </div>
               )}
             </div>

@@ -27,7 +27,8 @@ const StarRating = ({ rating, size = 'sm' }: { rating: number; size?: 'sm' | 'lg
 const CourseDetailPage = () => {
   const { id } = useParams();
   const { user } = useAuth();
-  const { courses, notes, liveClasses, addCourseReview, enrollCourse, isEnrolled, getCourseProgress } = useData();
+  const { courses, notes, liveClasses, addCourseReview, isEnrolled, getCourseProgress } = useData();
+  const { enrollInCourse } = useAuth();
   const [activeTab, setActiveTab] = useState<Tab>('Overview');
   const [expandedModules, setExpandedModules] = useState<number[]>([0]);
   const [reviewText, setReviewText] = useState('');
@@ -44,7 +45,7 @@ const CourseDetailPage = () => {
   const handleEnroll = async () => {
     if (!user || !id) return;
     try {
-      await enrollCourse(user.id, id);
+      await enrollInCourse(id);
       toast.success('Enrolled Successfully 🎉');
     } catch (error) {
       toast.error('Failed to enroll');
