@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Navigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { useData } from '@/contexts/DataContext';
-import { Course, LiveClass, Article } from '@/data/types';
+import { Course, LiveClass, Article, Note } from '@/data/types';
 import { BookOpen, Users, CreditCard, Calendar, FileText, Award, BarChart3, Settings, Plus, Pencil, Trash2, Eye, MessageCircle, Reply, X, Save, HelpCircle, Star, Mail, CheckCircle, XCircle, Send, Upload, Loader } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -45,7 +45,7 @@ const AdminPage = () => {
     courses, liveClasses, articles, payments, notes, testimonials, enquiries, supportTickets, categories,
     addCourse, updateCourse, deleteCourse, addLiveClass, updateLiveClass, deleteLiveClass,
     addArticle, updateArticle, deleteArticle, deleteComment, replyToComment,
-    addNote, deleteNote, approveTestimonial, deleteTestimonial, updateEnquiryStatus,
+    addNote, updateNote, deleteNote, approveTestimonial, deleteTestimonial, updateEnquiryStatus,
     addSupportMessage, closeSupportTicket,
     addCategory, updateCategory, deleteCategory,
   } = useData();
@@ -60,9 +60,17 @@ const AdminPage = () => {
   const [categoryDialog, setCategoryDialog] = useState<{ open: boolean; editing: string | null }>({ open: false, editing: null });
   const [categoryForm, setCategoryForm] = useState({ name: '' });
   const [noteDialog, setNoteDialog] = useState(false);
-  const [noteForm, setNoteForm] = useState({ title: '', courseId: '', category: '', description: '' });
+  const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
+  const [noteForm, setNoteForm] = useState({ title: '', courseId: '', category: '', description: '', link: '' });
   const [supportReply, setSupportReply] = useState<{ ticketId: string; text: string } | null>(null);
   const [settings, setSettings] = useState({ razorpayKeyId: '', razorpayKeySecret: '', smtpHost: '', smtpPort: '587', smtpUser: '', smtpPass: '', smtpFrom: 'noreply@eruditioninfinite.com' });
+
+  useEffect(() => {
+    if (categories.length > 0) {
+      const defaultCategory = categories.find((c) => c !== 'All') || categories[0];
+      setNoteForm((prev) => ({ ...prev, category: prev.category || defaultCategory || '' }));
+    }
+  }, [categories]);
   const [pendingArticles, setPendingArticles] = useState<any[]>([]);
   const [loadingPendingArticles, setLoadingPendingArticles] = useState(false);
   const [loadingApprovedArticles, setLoadingApprovedArticles] = useState(false);
@@ -285,12 +293,65 @@ const AdminPage = () => {
     setArticleDialog({ open: false, editing: null });
   };
 
-  const handleAddNote = () => {
-    if (!noteForm.title) { toast.error('Title is required.'); return; }
-    addNote({ id: `n-${Date.now()}`, ...noteForm, fileUrl: '#', uploadDate: new Date().toISOString().split('T')[0] });
-    toast.success('Note uploaded!');
-    setNoteForm({ title: '', courseId: '', category: '', description: '' });
+  const resetNoteDialog = () => {
     setNoteDialog(false);
+    setEditingNoteId(null);
+    setNoteForm({ title: '', courseId: '', category: '', description: '', link: '' });
+  };
+
+  const handleAddNote = async () => {
+    if (!noteForm.title || !noteForm.courseId) { toast.error('Title and Course are required.'); return; }
+    try {
+      const response = await fetch('/api/notes', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-admin-email': user?.email || process.env.NEXT_PUBLIC_ADMIN_EMAIL || '',
+          'x-admin-password': process.env.NEXT_PUBLIC_ADMIN_PASSWORD || '',
+        },
+        body: JSON.stringify({
+          ...noteForm,
+          uploadedBy: user?.email || process.env.NEXT_PUBLIC_ADMIN_EMAIL || 'admin@eruditioninfinite.com'
+        }),
+      });
+      if (response.ok) {
+        const data = await response.json();
+        addNote({ id: data.id, ...noteForm, fileUrl: noteForm.link || '#', uploadDate: new Date().toISOString().split('T')[0] });
+        toast.success('Note uploaded!');
+        resetNoteDialog();
+      } else {
+        toast.error('Failed to upload note');
+      }
+    } catch (error) {
+      toast.error('Error uploading note');
+    }
+  };
+
+  const handleEditNote = (note: Note) => {
+    setEditingNoteId(note.id);
+    setNoteForm({
+      title: note.title,
+      courseId: note.courseId,
+      category: note.category || '',
+      description: note.description || '',
+      link: note.link || note.fileUrl || '',
+    });
+    setNoteDialog(true);
+  };
+
+  const handleSaveNote = async () => {
+    if (!noteForm.title || !noteForm.courseId) { toast.error('Title and Course are required.'); return; }
+    if (editingNoteId) {
+      const success = await updateNote(editingNoteId, noteForm);
+      if (success) {
+        toast.success('Note updated!');
+        resetNoteDialog();
+      } else {
+        toast.error('Failed to update note');
+      }
+      return;
+    }
+    await handleAddNote();
   };
 
   const handleSupportReply = () => {
@@ -775,7 +836,27 @@ const handleSaveCategory = async (formData: Record<string, string>) => {
                         <p className="font-medium text-card-foreground">{n.title}</p>
                         <p className="text-xs text-muted-foreground">{n.category} • {n.uploadDate}</p>
                       </div>
-                      <Button variant="ghost" size="sm" className="h-7 text-xs text-destructive" onClick={() => { deleteNote(n.id); toast.success('Note deleted.'); }}><Trash2 className="h-3 w-3 mr-1" /> Delete</Button>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 text-xs text-primary"
+                          onClick={() => handleEditNote(n)}
+                        ><Pencil className="h-3 w-3 mr-1" /> Update</Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 text-xs text-destructive"
+                          onClick={async () => {
+                            const success = await deleteNote(n.id);
+                            if (success) {
+                              toast.success('Note deleted.');
+                            } else {
+                              toast.error('Failed to delete note.');
+                            }
+                          }}
+                        ><Trash2 className="h-3 w-3 mr-1" /> Delete</Button>
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -1021,14 +1102,26 @@ const handleSaveCategory = async (formData: Record<string, string>) => {
         </DialogOverlay>
       )}
       {noteDialog && (
-        <DialogOverlay onClose={() => setNoteDialog(false)}>
+        <DialogOverlay onClose={() => resetNoteDialog()}>
           <div className="flex items-center justify-between mb-4">
-            <h3 className="font-heading text-lg font-semibold text-card-foreground">Upload Note</h3>
-            <button onClick={() => setNoteDialog(false)}><X className="h-4 w-4 text-muted-foreground" /></button>
+            <h3 className="font-heading text-lg font-semibold text-card-foreground">{editingNoteId ? 'Update Note' : 'Upload Note'}</h3>
+            <button onClick={() => resetNoteDialog()}><X className="h-4 w-4 text-muted-foreground" /></button>
           </div>
           <div className="space-y-3">
             <div><label className="text-xs font-medium text-muted-foreground mb-1 block">Title *</label><Input value={noteForm.title} onChange={e => setNoteForm({ ...noteForm, title: e.target.value })} /></div>
-            <div><label className="text-xs font-medium text-muted-foreground mb-1 block">Category</label><Input value={noteForm.category} onChange={e => setNoteForm({ ...noteForm, category: e.target.value })} placeholder="e.g. Leadership Development" /></div>
+            <div>
+              <label className="text-xs font-medium text-muted-foreground mb-1 block">Category</label>
+              <select
+                value={noteForm.category}
+                onChange={e => setNoteForm({ ...noteForm, category: e.target.value })}
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+              >
+                <option value="">Select a category</option>
+                {categories.filter((cat) => cat !== 'All').map((cat) => (
+                  <option key={cat} value={cat}>{cat}</option>
+                ))}
+              </select>
+            </div>
             <div>
               <label className="text-xs font-medium text-muted-foreground mb-1 block">Course</label>
               <select value={noteForm.courseId} onChange={e => setNoteForm({ ...noteForm, courseId: e.target.value })} className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm">
@@ -1037,11 +1130,15 @@ const handleSaveCategory = async (formData: Record<string, string>) => {
               </select>
             </div>
             <div><label className="text-xs font-medium text-muted-foreground mb-1 block">Description</label><Textarea value={noteForm.description} onChange={e => setNoteForm({ ...noteForm, description: e.target.value })} rows={3} /></div>
+            <div><label className="text-xs font-medium text-muted-foreground mb-1 block">Link (Google Drive or external)</label><Input value={noteForm.link} onChange={e => setNoteForm({ ...noteForm, link: e.target.value })} placeholder="https://drive.google.com/..." /></div>
             <p className="text-xs text-muted-foreground">Note: File upload is simulated in demo mode.</p>
           </div>
           <div className="mt-4 flex gap-2 justify-end">
-            <Button variant="outline" size="sm" onClick={() => setNoteDialog(false)}>Cancel</Button>
-            <Button size="sm" onClick={handleAddNote}><Upload className="h-3 w-3 mr-1" /> Upload</Button>
+            <Button variant="outline" size="sm" onClick={() => resetNoteDialog()}>Cancel</Button>
+            <Button size="sm" onClick={handleSaveNote}>
+              {editingNoteId ? <Save className="h-3 w-3 mr-1" /> : <Upload className="h-3 w-3 mr-1" />} 
+              {editingNoteId ? 'Update' : 'Upload'}
+            </Button>
           </div>
         </DialogOverlay>
       )}

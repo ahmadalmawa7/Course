@@ -1,16 +1,53 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useData } from '@/contexts/DataContext';
 import { useAuth } from '@/contexts/AuthContext';
-import { FileText, Download, Search, Filter } from 'lucide-react';
+import { FileText, Download, Search, Filter, ExternalLink } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { toast } from 'sonner';
 
 const NotesPage = () => {
-  const { notes, courses, categories } = useData();
+  const { courses, categories } = useData();
   const { user } = useAuth();
+  const [notes, setNotes] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
   const [search, setSearch] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All');
+
+  useEffect(() => {
+    const fetchNotes = async () => {
+      setLoading(true);
+      if (!user) {
+        setError('Please sign up/login to access notes');
+        setLoading(false);
+        return;
+      }
+      const userId = user.id || (user as any)._id?.toString();
+      if (!userId) {
+        setError('Please sign up/login to access notes');
+        setLoading(false);
+        return;
+      }
+      setError('');
+      try {
+        const response = await fetch(`/api/notes?userId=${userId}`);
+        if (response.ok) {
+          const data = await response.json();
+          setNotes(data);
+        } else {
+          const errorData = await response.json();
+          setError(errorData.error || 'Failed to load notes');
+        }
+      } catch (error) {
+        setError('Error loading notes');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchNotes();
+  }, [user]);
 
   const filteredNotes = notes.filter(n => {
     const matchesSearch = n.title.toLowerCase().includes(search.toLowerCase()) || n.description.toLowerCase().includes(search.toLowerCase());
@@ -18,16 +55,22 @@ const NotesPage = () => {
     return matchesSearch && matchesCategory;
   });
 
-  const handleDownload = (note: typeof notes[0]) => {
-    const content = `${note.title}\n\nCategory: ${note.category}\n\n${note.description}\n\nThis is a mock PDF file for demonstration purposes.\n\nErudition Infinite - Integrating Talent, Thought & Action`;
-    const blob = new Blob([content], { type: 'application/pdf' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${note.title.replace(/\s+/g, '-')}.pdf`;
-    a.click();
-    URL.revokeObjectURL(url);
-    toast.success('Note downloaded!');
+  const handleDownload = (note) => {
+    if (note.link) {
+      window.open(note.link, '_blank');
+      toast.success('Note opened!');
+    } else {
+      // Fallback to mock PDF download
+      const content = `${note.title}\n\nCategory: ${note.category}\n\n${note.description}\n\nThis is a mock PDF file for demonstration purposes.\n\nErudition Infinite - Integrating Talent, Thought & Action`;
+      const blob = new Blob([content], { type: 'application/pdf' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${note.title.replace(/\s+/g, '-')}.pdf`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast.success('Note downloaded!');
+    }
   };
 
   return (
@@ -57,7 +100,12 @@ const NotesPage = () => {
             </div>
           </div>
 
-          {filteredNotes.length === 0 ? (
+          {error ? (
+            <div className="rounded-lg border border-border bg-card p-12 text-center">
+              <FileText className="mx-auto mb-3 h-10 w-10 text-muted-foreground" />
+              <p className="text-muted-foreground">{error}</p>
+            </div>
+          ) : filteredNotes.length === 0 ? (
             <div className="rounded-lg border border-border bg-card p-12 text-center">
               <FileText className="mx-auto mb-3 h-10 w-10 text-muted-foreground" />
               <p className="text-muted-foreground">No notes found.</p>

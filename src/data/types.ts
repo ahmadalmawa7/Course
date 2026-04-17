@@ -131,6 +131,9 @@ export interface Note {
   category: string;
   description: string;
   fileUrl: string;
+  link?: string;
+  uploadedBy?: string;
+  createdAt?: string;
   uploadDate: string;
 }
 

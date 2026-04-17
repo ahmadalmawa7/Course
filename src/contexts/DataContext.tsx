@@ -41,7 +41,8 @@ interface DataContextType {
   replyToComment: (articleId: string, commentId: string, reply: string) => void;
   addComment: (articleId: string, comment: ArticleComment) => void;
   addNote: (note: Note) => void;
-  deleteNote: (id: string) => void;
+  updateNote: (id: string, updatedFields: Partial<Note>) => Promise<boolean>;
+  deleteNote: (id: string) => Promise<boolean>;
   addTestimonial: (t: Testimonial) => void;
   approveTestimonial: (id: string) => void;
   deleteTestimonial: (id: string) => void;
@@ -165,7 +166,33 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
     fetchArticles();
   }, []);
 
-  const { user } = useAuth();
+  const { user, isAdmin } = useAuth();
+
+  const refetchAdminNotes = async () => {
+    if (!isAdmin || !user?.email) return;
+    try {
+      const response = await fetch('/api/notes?admin=true', {
+        headers: {
+          'Content-Type': 'application/json',
+          'x-admin-email': user.email,
+          'x-admin-password': process.env.NEXT_PUBLIC_ADMIN_PASSWORD || '',
+        },
+      });
+      if (response.ok) {
+        const data = await response.json();
+        if (Array.isArray(data)) {
+          setNotes(data.map((item: any) => ({
+            ...item,
+            id: item.id || item._id?.toString(),
+            fileUrl: item.fileUrl || item.link || '',
+            uploadDate: item.uploadDate || new Date(item.createdAt).toISOString(),
+          })));
+        }
+      }
+    } catch (error) {
+      console.error('Failed to fetch admin notes:', error);
+    }
+  };
 
   const refetchUserEnrollments = async (userId: string) => {
     try {
@@ -199,6 +226,10 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
 
     refetchUserEnrollments(user.id);
   }, [user?.id]);
+
+  useEffect(() => {
+    refetchAdminNotes();
+  }, [isAdmin, user?.email]);
 
   const addCourse = async (c: Course) => {
     try {
@@ -488,7 +519,50 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       replyToComment: (aId, cId, r) => setArticles(p => p.map(a => a.id === aId ? { ...a, comments: a.comments.map(c => c.id === cId ? { ...c, reply: r } : c) } : a)),
       addComment: (aId, c) => setArticles(p => p.map(a => a.id === aId ? { ...a, comments: [...a.comments, c] } : a)),
       addNote: (n) => setNotes(p => [...p, n]),
-      deleteNote: (id) => setNotes(p => p.filter(n => n.id !== id)),
+      updateNote: async (id, updatedFields) => {
+        if (!user?.email) return false;
+        try {
+          const response = await fetch('/api/notes', {
+            method: 'PUT',
+            headers: {
+              'Content-Type': 'application/json',
+              'x-admin-email': user.email,
+              'x-admin-password': process.env.NEXT_PUBLIC_ADMIN_PASSWORD || '',
+            },
+            body: JSON.stringify({ id, ...updatedFields }),
+          });
+          if (!response.ok) return false;
+          setNotes(p => p.map(note => note.id === id ? {
+            ...note,
+            ...updatedFields,
+            fileUrl: updatedFields.link !== undefined ? updatedFields.link : note.fileUrl,
+          } : note));
+          return true;
+        } catch (error) {
+          console.error('Failed to update note:', error);
+          return false;
+        }
+      },
+      deleteNote: async (id) => {
+        if (!user?.email) return false;
+        try {
+          const response = await fetch('/api/notes', {
+            method: 'DELETE',
+            headers: {
+              'Content-Type': 'application/json',
+              'x-admin-email': user.email,
+              'x-admin-password': process.env.NEXT_PUBLIC_ADMIN_PASSWORD || '',
+            },
+            body: JSON.stringify({ id }),
+          });
+          if (!response.ok) return false;
+          setNotes(p => p.filter(n => n.id !== id));
+          return true;
+        } catch (error) {
+          console.error('Failed to delete note:', error);
+          return false;
+        }
+      },
       addTestimonial: (t) => setTestimonials(p => [...p, t]),
       approveTestimonial: (id) => setTestimonials(p => p.map(t => t.id === id ? { ...t, approved: true } : t)),
       deleteTestimonial: (id) => setTestimonials(p => p.filter(t => t.id !== id)),
