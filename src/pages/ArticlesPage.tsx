@@ -21,10 +21,6 @@ const ArticlesPage = () => {
         if (response.ok) {
           const data = await response.json();
           setArticles(data);
-
-          // Extract unique categories
-          const uniqueCategories = ['All', ...Array.from(new Set(data.map((a: any) => a.category)))];
-          setCategories(uniqueCategories as string[]);
         }
       } catch (error) {
         console.error('Failed to fetch articles:', error);
@@ -33,7 +29,22 @@ const ArticlesPage = () => {
       }
     };
 
+    const fetchCategories = async () => {
+      try {
+        const response = await fetch('/api/categories');
+        if (response.ok) {
+          const data = await response.json();
+          if (Array.isArray(data) && data.length > 0) {
+            setCategories(data as string[]);
+          }
+        }
+      } catch (error) {
+        console.error('Failed to fetch categories:', error);
+      }
+    };
+
     fetchArticles();
+    fetchCategories();
   }, []);
 
   const filtered = active === 'All' ? articles : articles.filter((a) => a.category === active);

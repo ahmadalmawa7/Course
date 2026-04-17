@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useData } from '@/contexts/DataContext';
 import { Button } from '@/components/ui/button';
@@ -19,7 +19,7 @@ interface ArticleSubmissionDialogProps {
 
 export const ArticleSubmissionDialog = ({ onSubmitSuccess }: ArticleSubmissionDialogProps) => {
   const { user } = useAuth();
-  const { refetchArticles } = useData();
+  const { refetchArticles, categories } = useData();
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState({
@@ -30,6 +30,13 @@ export const ArticleSubmissionDialog = ({ onSubmitSuccess }: ArticleSubmissionDi
     readTime: '5 min read',
     image: '',
   });
+
+  useEffect(() => {
+    if (categories.length > 0) {
+      const defaultCategory = categories.find((c) => c !== 'All') || categories[0];
+      setFormData((prev) => ({ ...prev, category: defaultCategory }));
+    }
+  }, [categories]);
 
   if (!user) return null;
 
@@ -136,11 +143,9 @@ export const ArticleSubmissionDialog = ({ onSubmitSuccess }: ArticleSubmissionDi
                 onChange={(e) => setFormData({ ...formData, category: e.target.value })}
                 className="w-full rounded-lg border border-border bg-card p-2 text-sm text-card-foreground focus:outline-none focus:ring-1 focus:ring-primary mt-1"
               >
-                <option>Leadership</option>
-                <option>Communication Skills</option>
-                <option>Career Development</option>
-                <option>Personal Growth</option>
-                <option>Corporate Behaviour</option>
+                {categories.filter((cat) => cat !== 'All').map((cat) => (
+                  <option key={cat} value={cat}>{cat}</option>
+                ))}
               </select>
             </div>
 

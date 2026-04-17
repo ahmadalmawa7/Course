@@ -1004,7 +1004,7 @@ const handleSaveCategory = async (formData: Record<string, string>) => {
         </DialogOverlay>
       )}
       {classDialog.open && <ClassFormDialog initial={classDialog.editing} courses={courses} onSave={handleSaveClass} onClose={() => setClassDialog({ open: false, editing: null })} />}
-      {articleDialog.open && <ArticleFormDialog initial={articleDialog.editing} onSave={handleSaveArticle} onClose={() => setArticleDialog({ open: false, editing: null })} />}
+      {articleDialog.open && <ArticleFormDialog initial={articleDialog.editing} categories={categories} onSave={handleSaveArticle} onClose={() => setArticleDialog({ open: false, editing: null })} />}
       {categoryDialog.open && (
         <DialogOverlay onClose={() => { setCategoryDialog({ open: false, editing: null }); setCategoryForm({ name: '' }); }}>
           <h3 className="font-heading text-lg font-semibold text-card-foreground mb-4">{categoryDialog.editing ? 'Edit Category' : 'Add Category'}</h3>
@@ -1205,11 +1205,19 @@ function ClassFormDialog({ initial, courses, onSave, onClose }: { initial: LiveC
   );
 }
 
-function ArticleFormDialog({ initial, onSave, onClose }: { initial: Article | null; onSave: (data: Record<string, string>) => void; onClose: () => void }) {
+function ArticleFormDialog({ initial, categories, onSave, onClose }: { initial: Article | null; categories: string[]; onSave: (data: Record<string, string>) => void; onClose: () => void }) {
   const [form, setForm] = useState({
     title: initial?.title || '', category: initial?.category || '', excerpt: initial?.excerpt || '',
     content: initial?.content || '', author: initial?.author || 'Lt Col Shreesh Kumar (Retd)',
   });
+
+  useEffect(() => {
+    if (!initial) {
+      const defaultCategory = categories.find(c => c !== 'All') || categories[0] || '';
+      setForm(prev => ({ ...prev, category: prev.category || defaultCategory }));
+    }
+  }, [categories, initial]);
+
   return (
     <DialogOverlay onClose={onClose}>
       <div className="flex items-center justify-between mb-4">
@@ -1218,7 +1226,18 @@ function ArticleFormDialog({ initial, onSave, onClose }: { initial: Article | nu
       </div>
       <div className="space-y-3">
         <div><label className="text-xs font-medium text-muted-foreground mb-1 block">Title *</label><Input value={form.title} onChange={e => setForm({ ...form, title: e.target.value })} /></div>
-        <div><label className="text-xs font-medium text-muted-foreground mb-1 block">Category</label><Input value={form.category} onChange={e => setForm({ ...form, category: e.target.value })} placeholder="e.g. Leadership" /></div>
+        <div>
+          <label className="text-xs font-medium text-muted-foreground mb-1 block">Category</label>
+          <select
+            value={form.category}
+            onChange={e => setForm({ ...form, category: e.target.value })}
+            className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+          >
+            {categories.filter(c => c !== 'All').map((cat) => (
+              <option key={cat} value={cat}>{cat}</option>
+            ))}
+          </select>
+        </div>
         <div><label className="text-xs font-medium text-muted-foreground mb-1 block">Excerpt</label><Textarea value={form.excerpt} onChange={e => setForm({ ...form, excerpt: e.target.value })} rows={2} /></div>
         <div><label className="text-xs font-medium text-muted-foreground mb-1 block">Content *</label><Textarea value={form.content} onChange={e => setForm({ ...form, content: e.target.value })} rows={6} /></div>
         <div><label className="text-xs font-medium text-muted-foreground mb-1 block">Author</label><Input value={form.author} onChange={e => setForm({ ...form, author: e.target.value })} /></div>

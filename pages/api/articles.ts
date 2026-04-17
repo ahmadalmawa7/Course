@@ -4,6 +4,15 @@ import { ObjectId } from 'mongodb';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   try {
+    // Enable CORS preflight for cross-origin requests if needed.
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+
+    if (req.method === 'OPTIONS') {
+      return res.status(204).end();
+    }
+
     const { db } = await connectToDatabase();
     const collection = db.collection('articles');
 
