@@ -535,7 +535,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
           setNotes(p => p.map(note => note.id === id ? {
             ...note,
             ...updatedFields,
-            fileUrl: updatedFields.link !== undefined ? updatedFields.link : note.fileUrl,
+            fileUrl: updatedFields.fileUrl !== undefined ? updatedFields.fileUrl : note.fileUrl,
           } : note));
           return true;
         } catch (error) {

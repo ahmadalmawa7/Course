@@ -23,6 +23,17 @@ export interface RecordedLecture {
   isPreview: boolean;
 }
 
+export interface CourseVideo {
+  title: string;
+  videoUrl: string;
+  duration?: string;
+}
+
+export interface CourseAdvantageSection {
+  title: string;
+  videos: CourseVideo[];
+}
+
 export interface Course {
   id: string;
   title: string;
@@ -43,8 +54,8 @@ export interface Course {
   // Rich fields
   highlights?: string[];          // "What you'll learn" bullet points
   whyTake?: string;               // Why this course paragraph
-  advantages?: string[];          // Advantages / who this is for
-  requirements?: string[];        // Prerequisites
+  advantages?: Array<string | CourseAdvantageSection>; // Advantages / section titles with videos
+  requirements?: string[];        // Prerequisites (legacy)
   targetAudience?: string[];      // Who should take this
   language?: string;
   certificate?: boolean;

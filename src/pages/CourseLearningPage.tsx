@@ -5,11 +5,11 @@ import { useData } from '@/contexts/DataContext';
 import { Button } from '@/components/ui/button';
 import {
   Play, Lock, CheckCircle, ChevronDown, ChevronUp, BookOpen,
-  FileText, Clock, Star, ArrowLeft, TrendingUp, X
+  FileText, Clock, Star, ArrowLeft, TrendingUp, X, Download, ExternalLink
 } from 'lucide-react';
 import { toast } from 'sonner';
 
-const TABS = ['Lectures', 'Notes', 'Assignments'] as const;
+const TABS = ['Overview', 'Lectures', 'Notes', 'Assignments'] as const;
 type Tab = typeof TABS[number];
 
 const CourseLearningPage = () => {
@@ -18,14 +18,40 @@ const CourseLearningPage = () => {
   const { courses, updateProgress, getCourseProgress, isEnrolled, lectureProgress } = useData();
   const navigate = useNavigate();
   
-  const [activeTab, setActiveTab] = useState<Tab>('Lectures');
-  const [expandedModules, setExpandedModules] = useState<number[]>([0]);
-  const [currentLecture, setCurrentLecture] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<Tab>('Overview');
+  const [expandedAdvantage, setExpandedAdvantage] = useState<number | null>(null);
+  const [currentVideo, setCurrentVideo] = useState<{ title: string; videoUrl: string; duration?: string; id: string } | null>(null);
   const [watchTime, setWatchTime] = useState(0);
+  const [courseNotes, setCourseNotes] = useState<any[]>([]);
+  const [notesLoading, setNotesLoading] = useState(false);
+  const [notesError, setNotesError] = useState('');
 
   const course = courses.find((c) => c.id === id);
   const isUserEnrolled = user && isEnrolled(user.id, id || '');
   const progress = user ? getCourseProgress(user.id, id || '') : 0;
+
+  const advantageSections = course ? (course.advantages || []).map((adv, sectionIndex) => {
+    if (typeof adv === 'string') {
+      return {
+        title: adv,
+        videos: (course.requirements || []).map((req, reqIndex) => ({
+          title: req,
+          videoUrl: '',
+          duration: undefined,
+          id: `legacy-${sectionIndex}-${reqIndex}`,
+        })),
+      };
+    }
+    return {
+      title: adv.title || '',
+      videos: (adv.videos || []).map((video, videoIndex) => ({
+        title: video.title,
+        videoUrl: video.videoUrl,
+        duration: video.duration,
+        id: `${sectionIndex}-${videoIndex}`,
+      })),
+    };
+  }) : [];
 
   useEffect(() => {
     if (!user || !id) return;
@@ -35,21 +61,20 @@ const CourseLearningPage = () => {
     }
   }, [user, id, isUserEnrolled, navigate]);
 
-  const toggleModule = (idx: number) => {
-    setExpandedModules((prev) =>
-      prev.includes(idx) ? prev.filter((i) => i !== idx) : [...prev, idx]
-    );
+  const toggleAdvantage = (idx: number) => {
+    setExpandedAdvantage((prev) => (prev === idx ? null : idx));
   };
 
-  const handleLectureClick = (lectureId: string) => {
-    setCurrentLecture(lectureId);
+  const handleVideoSelect = (sectionIndex: number, videoIndex: number, video: { title: string; videoUrl: string; duration?: string }) => {
+    const id = `${sectionIndex}-${videoIndex}`;
+    setCurrentVideo({ ...video, id });
   };
 
   const handleMarkComplete = async () => {
-    if (!user || !currentLecture || !id) return;
+    if (!user || !currentVideo?.id || !id) return;
     try {
-      await updateProgress(user.id, id, currentLecture, true, watchTime);
-      toast.success('Lecture marked as completed! 🎉');
+      await updateProgress(user.id, id, currentVideo.id, true, watchTime);
+      toast.success('Video marked as completed! 🎉');
     } catch (error) {
       toast.error('Failed to update progress');
     }
@@ -64,6 +89,48 @@ const CourseLearningPage = () => {
       toast.error('Failed to enroll');
     }
   };
+
+  useEffect(() => {
+    const fetchNotes = async () => {
+      if (!id) return;
+      setNotesLoading(true);
+      setNotesError('');
+      setCourseNotes([]);
+
+      if (!user) {
+        setNotesError('Please sign up/login to access notes');
+        setNotesLoading(false);
+        return;
+      }
+
+      try {
+        const userId = user.id || (user as any)._id?.toString?.();
+        const response = await fetch(`/api/notes?courseId=${encodeURIComponent(id)}&userId=${encodeURIComponent(userId)}`);
+        const data = await response.json();
+
+        if (!response.ok) {
+          if (response.status === 401) {
+            setNotesError('Please sign up/login to access notes');
+          } else if (response.status === 403) {
+            setNotesError('Please enroll in this course to access notes');
+          } else {
+            setNotesError(data.error || 'Failed to load notes');
+          }
+          setCourseNotes([]);
+        } else {
+          setCourseNotes(Array.isArray(data) ? data : []);
+        }
+      } catch (error) {
+        setNotesError('Failed to load notes');
+      } finally {
+        setNotesLoading(false);
+      }
+    };
+
+    if (activeTab === 'Notes') {
+      fetchNotes();
+    }
+  }, [activeTab, id, user]);
 
   if (!course) {
     return (
@@ -87,12 +154,10 @@ const CourseLearningPage = () => {
     );
   }
 
-  const currentLectureData = currentLecture
-    ? course.recordedLectures?.find(l => l.id === currentLecture)
-    : null;
+  const currentLectureData = currentVideo;
 
-  const isLectureCompleted = currentLecture
-    ? lectureProgress.some(lp => lp.userId === user?.id && lp.lectureId === currentLecture && lp.completed)
+  const isLectureCompleted = currentVideo?.id
+    ? lectureProgress.some(lp => lp.userId === user?.id && lp.lectureId === currentVideo.id && lp.completed)
     : false;
 
   return (
@@ -127,19 +192,19 @@ const CourseLearningPage = () => {
           <div className="lg:col-span-2 space-y-6">
             {/* Video Player */}
             <div className="rounded-lg overflow-hidden bg-black aspect-video">
-              {currentLectureData ? (
-                <div className="w-full h-full flex items-center justify-center">
-                  <div className="text-center text-white">
-                    <Play className="mx-auto mb-2 h-12 w-12" />
-                    <p className="text-lg font-medium">{currentLectureData.title}</p>
-                    <p className="text-sm text-white/70">{currentLectureData.duration}</p>
-                  </div>
-                </div>
+              {currentLectureData && currentLectureData.videoUrl ? (
+                <video
+                  controls
+                  className="w-full h-full bg-black object-cover"
+                  src={currentLectureData.videoUrl}
+                >
+                  Your browser does not support the video tag.
+                </video>
               ) : (
                 <div className="w-full h-full flex items-center justify-center">
                   <div className="text-center text-white/70">
                     <Play className="mx-auto mb-2 h-12 w-12" />
-                    <p>Select a lecture to start learning</p>
+                    <p>{currentLectureData ? 'Video not available' : 'Select a video to start learning'}</p>
                   </div>
                 </div>
               )}
@@ -195,6 +260,17 @@ const CourseLearningPage = () => {
               </div>
 
               <div className="p-6">
+                {activeTab === 'Overview' && (
+                  <div className="space-y-6">
+                    {/* Course Description */}
+                    {course.description && (
+                      <section>
+                        <h3 className="mb-3 font-heading text-lg font-bold text-foreground">Course Description</h3>
+                        <p className="text-sm text-muted-foreground leading-relaxed">{course.description}</p>
+                      </section>
+                    )}
+                  </div>
+                )}
                 {activeTab === 'Lectures' && (
                   <div className="text-center text-muted-foreground">
                     <BookOpen className="mx-auto mb-2 h-8 w-8" />
@@ -202,9 +278,69 @@ const CourseLearningPage = () => {
                   </div>
                 )}
                 {activeTab === 'Notes' && (
-                  <div className="text-center text-muted-foreground">
-                    <FileText className="mx-auto mb-2 h-8 w-8" />
-                    <p>Course notes will be available here</p>
+                  <div>
+                    {notesLoading ? (
+                      <div className="text-center text-muted-foreground">
+                        <FileText className="mx-auto mb-2 h-8 w-8" />
+                        <p>Loading notes...</p>
+                      </div>
+                    ) : notesError ? (
+                      <div className="text-center text-muted-foreground">
+                        <FileText className="mx-auto mb-2 h-8 w-8" />
+                        <p>{notesError}</p>
+                      </div>
+                    ) : courseNotes.length === 0 ? (
+                      <div className="text-center text-muted-foreground">
+                        <FileText className="mx-auto mb-2 h-8 w-8" />
+                        <p>Course notes will be available here</p>
+                      </div>
+                    ) : (
+                      <div className="space-y-4">
+                        {courseNotes.map((note) => (
+                          <div key={note.id} className="rounded-lg border border-border bg-card p-4">
+                            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                              <div>
+                                <h3 className="text-base font-semibold text-card-foreground">{note.title}</h3>
+                                <p className="text-sm text-muted-foreground mt-2">{note.description}</p>
+                                <p className="text-xs text-muted-foreground mt-2">{new Date(note.uploadDate).toLocaleString()}</p>
+                              </div>
+                              <div className="flex flex-col items-start gap-2 sm:items-end">
+                                {note.link ? (
+                                  <a
+                                    href={note.link}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="inline-flex items-center gap-1 rounded-full border border-primary px-3 py-1 text-xs font-semibold text-primary hover:bg-primary/10"
+                                  >
+                                    <ExternalLink className="h-3 w-3" /> Click Here
+                                  </a>
+                                ) : null}
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="gap-1 text-xs border-primary text-primary"
+                                  onClick={() => {
+                                    if (note.fileUrl) {
+                                      const a = document.createElement('a');
+                                      a.href = note.fileUrl;
+                                      a.download = `${note.title.replace(/\s+/g, '-')}`;
+                                      a.target = '_blank';
+                                      document.body.appendChild(a);
+                                      a.click();
+                                      document.body.removeChild(a);
+                                    } else if (note.link) {
+                                      window.open(note.link, '_blank');
+                                    }
+                                  }}
+                                >
+                                  <Download className="h-3 w-3" /> Download
+                                </Button>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 )}
                 {activeTab === 'Assignments' && (
@@ -226,25 +362,21 @@ const CourseLearningPage = () => {
               </div>
 
               <div className="max-h-[calc(100vh-200px)] overflow-y-auto">
-                {course.modulesList.map((mod, idx) => {
-                  const moduleLectures = (course.recordedLectures || []).filter((l) => l.moduleIndex === idx);
-                  return (
+                {advantageSections.length > 0 ? (
+                  advantageSections.map((section, idx) => (
                     <div key={idx} className="border-b border-border last:border-b-0">
                       <button
-                        onClick={() => toggleModule(idx)}
+                        onClick={() => toggleAdvantage(idx)}
                         className="w-full flex items-center justify-between p-4 hover:bg-muted/40 transition-colors"
                       >
                         <div className="flex items-center gap-3">
                           <span className="flex h-7 w-7 items-center justify-center rounded-full bg-primary/10 text-xs font-bold text-primary shrink-0">
                             {idx + 1}
                           </span>
-                          <span className="font-medium text-card-foreground text-sm text-left">{mod.title}</span>
+                          <span className="font-medium text-card-foreground text-sm text-left">{section.title || 'Untitled section'}</span>
                         </div>
-                        <div className="flex items-center gap-3 shrink-0">
-                          <span className="text-xs text-muted-foreground">
-                            {mod.lessons} lessons · {mod.duration}
-                          </span>
-                          {expandedModules.includes(idx) ? (
+                        <div className="flex items-center shrink-0">
+                          {expandedAdvantage === idx ? (
                             <ChevronUp className="h-4 w-4 text-muted-foreground" />
                           ) : (
                             <ChevronDown className="h-4 w-4 text-muted-foreground" />
@@ -252,48 +384,48 @@ const CourseLearningPage = () => {
                         </div>
                       </button>
 
-                      {expandedModules.includes(idx) && (
-                        <div className="divide-y divide-border bg-muted/20">
-                          {moduleLectures.map((lec) => {
-                            const isCompleted = lectureProgress.some(
-                              lp => lp.userId === user?.id && lp.lectureId === lec.id && lp.completed
-                            );
-                            const isActive = currentLecture === lec.id;
-                            return (
-                              <div
-                                key={lec.id}
-                                onClick={() => handleLectureClick(lec.id)}
-                                className={`flex items-center justify-between p-4 cursor-pointer transition-colors ${
-                                  isActive ? 'bg-primary/10 border-l-4 border-primary' : 'hover:bg-muted/40'
-                                }`}
-                              >
-                                <div className="flex items-center gap-3">
-                                  {isCompleted ? (
-                                    <CheckCircle className="h-4 w-4 text-green-600 shrink-0" />
-                                  ) : lec.isPreview || isUserEnrolled ? (
-                                    <Play className="h-4 w-4 text-primary shrink-0" />
-                                  ) : (
-                                    <Lock className="h-4 w-4 text-muted-foreground shrink-0" />
-                                  )}
-                                  <span className={`text-sm ${isActive ? 'text-primary font-medium' : 'text-muted-foreground'}`}>
-                                    {lec.title}
-                                  </span>
-                                </div>
-                                <span className="text-xs text-muted-foreground shrink-0">{lec.duration}</span>
-                              </div>
-                            );
-                          })}
-
-                          {moduleLectures.length === 0 && (
-                            <div className="p-4 text-sm text-muted-foreground">
-                              Content coming soon...
-                            </div>
-                          )}
+                      {expandedAdvantage === idx && (
+                        <div className="bg-muted/20 px-4 pb-4">
+                          <div className="space-y-2 pt-2">
+                            {section.videos.map((video, videoIdx) => {
+                              const isActive = currentVideo?.id === video.id;
+                              return (
+                                <button
+                                  key={video.id}
+                                  onClick={() => handleVideoSelect(idx, videoIdx, video)}
+                                  className={`w-full rounded-lg border px-3 py-3 text-left transition-colors ${
+                                    isActive ? 'border-primary bg-primary/10' : 'border-border bg-card hover:bg-muted/70'
+                                  }`}
+                                >
+                                  <div className="flex items-center justify-between gap-3">
+                                    <div className="flex items-center gap-2">
+                                      <span className="flex h-7 w-7 items-center justify-center rounded-full bg-primary/10 text-xs font-bold text-primary">
+                                        ▶
+                                      </span>
+                                      <div>
+                                        <p className={`text-sm font-medium ${isActive ? 'text-primary' : 'text-card-foreground'}`}>{video.title || 'Untitled video'}</p>
+                                        {video.duration && (
+                                          <p className="text-xs text-muted-foreground">{video.duration}</p>
+                                        )}
+                                      </div>
+                                    </div>
+                                    {isActive && (
+                                      <span className="text-xs text-primary font-semibold">Playing</span>
+                                    )}
+                                  </div>
+                                </button>
+                              );
+                            })}
+                          </div>
                         </div>
                       )}
                     </div>
-                  );
-                })}
+                  ))
+                ) : (
+                  <div className="p-4 text-sm text-muted-foreground">
+                    No advantages available
+                  </div>
+                )}
               </div>
             </div>
           </div>

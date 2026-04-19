@@ -238,14 +238,17 @@ const CourseDetailPage = () => {
               <section>
                 <h2 className="mb-4 font-heading text-xl font-bold text-foreground">Key Advantages</h2>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  {course.advantages!.map((adv, i) => (
-                    <div key={i} className="flex gap-3 rounded-lg border border-border bg-card p-4">
-                      <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-bold text-primary">
-                        {i + 1}
+                  {course.advantages!.map((adv, i) => {
+                    const title = typeof adv === 'string' ? adv : adv.title;
+                    return (
+                      <div key={i} className="flex gap-3 rounded-lg border border-border bg-card p-4">
+                        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-bold text-primary">
+                          {i + 1}
+                        </div>
+                        <p className="text-sm text-card-foreground leading-relaxed">{title}</p>
                       </div>
-                      <p className="text-sm text-card-foreground leading-relaxed">{adv}</p>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </section>
             )}

@@ -27,7 +27,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const form = new IncomingForm({
       uploadDir,
       keepExtensions: true,
-      maxFileSize: 5 * 1024 * 1024, // 5MB limit
+      maxFileSize: 10 * 1024 * 1024, // 10MB limit
+      multiples: false,
     });
 
     form.parse(req, async (err, fields, files) => {
@@ -36,17 +37,19 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         return res.status(500).json({ error: 'File upload failed' });
       }
 
-      const file = files.file?.[0];
+      const file = Array.isArray(files.file) ? files.file[0] : files.file;
       if (!file) {
         return res.status(400).json({ error: 'No file uploaded' });
       }
 
       // Validate file type
-      const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+      const allowedTypes = [
+        'image/jpeg', 'image/png', 'image/gif', 'image/webp', 'application/pdf',
+        'video/mp4', 'video/webm', 'video/ogg', 'video/quicktime', 'video/x-matroska'
+      ];
       if (!allowedTypes.includes(file.mimetype || '')) {
-        // Clean up the uploaded file
         await fs.unlink(file.filepath);
-        return res.status(400).json({ error: 'Invalid file type. Only JPEG, PNG, GIF, and WebP are allowed.' });
+        return res.status(400).json({ error: 'Invalid file type. Only JPEG, PNG, GIF, WebP, PDF, and common video formats are allowed.' });
       }
 
       // Generate a unique filename based on type

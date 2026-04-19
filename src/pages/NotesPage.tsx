@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useData } from '@/contexts/DataContext';
 import { useAuth } from '@/contexts/AuthContext';
-import { FileText, Download, Search, Filter, ExternalLink } from 'lucide-react';
+import { FileText, Download, Search, ExternalLink } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { toast } from 'sonner';
@@ -55,22 +55,36 @@ const NotesPage = () => {
     return matchesSearch && matchesCategory;
   });
 
+  const isExternalNote = (note: any) => !!note.link;
+
   const handleDownload = (note) => {
+    if (note.fileUrl) {
+      const a = document.createElement('a');
+      a.href = note.fileUrl;
+      a.download = `${note.title.replace(/\s+/g, '-')}`;
+      a.target = '_blank';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      toast.success('Note downloaded!');
+      return;
+    }
+
     if (note.link) {
       window.open(note.link, '_blank');
       toast.success('Note opened!');
-    } else {
-      // Fallback to mock PDF download
-      const content = `${note.title}\n\nCategory: ${note.category}\n\n${note.description}\n\nThis is a mock PDF file for demonstration purposes.\n\nErudition Infinite - Integrating Talent, Thought & Action`;
-      const blob = new Blob([content], { type: 'application/pdf' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `${note.title.replace(/\s+/g, '-')}.pdf`;
-      a.click();
-      URL.revokeObjectURL(url);
-      toast.success('Note downloaded!');
+      return;
     }
+
+    const content = `${note.title}\n\nCategory: ${note.category}\n\n${note.description}\n\nThis is a mock PDF file for demonstration purposes.\n\nErudition Infinite - Integrating Talent, Thought & Action`;
+    const blob = new Blob([content], { type: 'application/pdf' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${note.title.replace(/\s+/g, '-')}.pdf`;
+    a.click();
+    URL.revokeObjectURL(url);
+    toast.success('Note downloaded!');
   };
 
   return (
@@ -125,6 +139,13 @@ const NotesPage = () => {
                         <p className="text-xs text-gold mb-2">{note.category}</p>
                         <p className="text-sm text-muted-foreground line-clamp-2 mb-3">{note.description}</p>
                         {course && <p className="text-xs text-muted-foreground mb-3">Course: {course.title}</p>}
+                        {note.link && (
+                          <div className="mb-2 flex flex-wrap items-center gap-2">
+                            <a href={note.link} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-xs font-semibold text-primary hover:underline">
+                              👉 Link (Google Drive or external) – Click Here
+                            </a>
+                          </div>
+                        )}
                         <div className="flex items-center justify-between">
                           <span className="text-xs text-muted-foreground">{note.uploadDate}</span>
                           <Button variant="outline" size="sm" className="gap-1 text-xs border-primary text-primary" onClick={() => handleDownload(note)}>

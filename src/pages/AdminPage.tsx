@@ -3,7 +3,7 @@ import { Navigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { useData } from '@/contexts/DataContext';
 import { Course, LiveClass, Article, Note } from '@/data/types';
-import { BookOpen, Users, CreditCard, Calendar, FileText, Award, BarChart3, Settings, Plus, Pencil, Trash2, Eye, MessageCircle, Reply, X, Save, HelpCircle, Star, Mail, CheckCircle, XCircle, Send, Upload, Loader } from 'lucide-react';
+import { BookOpen, Users, CreditCard, Calendar, FileText, Award, BarChart3, Settings, Plus, Pencil, Trash2, Eye, MessageCircle, Reply, X, Save, HelpCircle, Star, Mail, CheckCircle, XCircle, Send, Upload, Loader, ExternalLink } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -61,7 +61,9 @@ const AdminPage = () => {
   const [categoryForm, setCategoryForm] = useState({ name: '' });
   const [noteDialog, setNoteDialog] = useState(false);
   const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
-  const [noteForm, setNoteForm] = useState({ title: '', courseId: '', category: '', description: '', link: '' });
+  const [noteForm, setNoteForm] = useState({ title: '', courseId: '', category: '', description: '', link: '', fileUrl: '' });
+  const [noteFileUploading, setNoteFileUploading] = useState(false);
+  const [noteFileName, setNoteFileName] = useState('');
   const [supportReply, setSupportReply] = useState<{ ticketId: string; text: string } | null>(null);
   const [settings, setSettings] = useState({ razorpayKeyId: '', razorpayKeySecret: '', smtpHost: '', smtpPort: '587', smtpUser: '', smtpPass: '', smtpFrom: 'noreply@eruditioninfinite.com' });
 
@@ -180,14 +182,28 @@ const AdminPage = () => {
         category: data.category || 'General',
         description: data.description || '',
         instructor: data.instructor || 'Lt Col Shreesh Kumar (Retd)',
+        instructorBio: data.instructorBio || '',
         duration: data.duration || '',
         modules: data.modules || 0,
         price: data.price || 0,
+        originalPrice: data.originalPrice,
         image: data.image || '',
         level: data.level || 'Beginner',
         enrolled: 0,
         rating: 4.5,
         modulesList: data.modulesList || [],
+        highlights: data.highlights || [],
+        advantages: data.advantages || [],
+        requirements: data.requirements || [],
+        targetAudience: data.targetAudience || [],
+        recordedLectures: data.recordedLectures || [],
+        whyTake: data.whyTake || '',
+        syllabus: data.syllabus || '',
+        tags: data.tags || [],
+        language: data.language || 'English',
+        certificate: data.certificate ?? true,
+        liveSessionsIncluded: data.liveSessionsIncluded ?? true,
+        notesIncluded: data.notesIncluded ?? true,
       };
 
       await addCourse(newCourse);
@@ -296,7 +312,9 @@ const AdminPage = () => {
   const resetNoteDialog = () => {
     setNoteDialog(false);
     setEditingNoteId(null);
-    setNoteForm({ title: '', courseId: '', category: '', description: '', link: '' });
+    setNoteForm({ title: '', courseId: '', category: '', description: '', link: '', fileUrl: '' });
+    setNoteFileName('');
+    setNoteFileUploading(false);
   };
 
   const handleAddNote = async () => {
@@ -316,7 +334,7 @@ const AdminPage = () => {
       });
       if (response.ok) {
         const data = await response.json();
-        addNote({ id: data.id, ...noteForm, fileUrl: noteForm.link || '#', uploadDate: new Date().toISOString().split('T')[0] });
+        addNote({ id: data.id, ...noteForm, fileUrl: noteForm.fileUrl || noteForm.link || '#', uploadDate: new Date().toISOString().split('T')[0] });
         toast.success('Note uploaded!');
         resetNoteDialog();
       } else {
@@ -352,6 +370,36 @@ const AdminPage = () => {
       return;
     }
     await handleAddNote();
+  };
+
+  const handleNoteFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    setNoteFileUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('type', 'notes');
+
+      const response = await fetch('/api/upload', {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setNoteForm(prev => ({ ...prev, fileUrl: data.url, link: prev.link }));
+        setNoteFileName(file.name);
+        toast.success('File uploaded successfully!');
+      } else {
+        toast.error('File upload failed');
+      }
+    } catch (error) {
+      toast.error('File upload error');
+    } finally {
+      setNoteFileUploading(false);
+    }
   };
 
   const handleSupportReply = () => {
@@ -1130,8 +1178,23 @@ const handleSaveCategory = async (formData: Record<string, string>) => {
               </select>
             </div>
             <div><label className="text-xs font-medium text-muted-foreground mb-1 block">Description</label><Textarea value={noteForm.description} onChange={e => setNoteForm({ ...noteForm, description: e.target.value })} rows={3} /></div>
-            <div><label className="text-xs font-medium text-muted-foreground mb-1 block">Link (Google Drive or external)</label><Input value={noteForm.link} onChange={e => setNoteForm({ ...noteForm, link: e.target.value })} placeholder="https://drive.google.com/..." /></div>
-            <p className="text-xs text-muted-foreground">Note: File upload is simulated in demo mode.</p>
+            <div className="space-y-3">
+              <div>
+                <label className="text-xs font-medium text-muted-foreground mb-1 block">Upload File</label>
+                <input
+                  type="file"
+                  accept=".pdf,image/*"
+                  onChange={handleNoteFileChange}
+                  className="block w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                />
+                {noteFileUploading && <p className="mt-2 text-xs text-muted-foreground">Uploading file...</p>}
+              </div>
+              <div>
+                <label className="text-xs font-medium text-muted-foreground mb-1 block">Link (Google Drive or external)</label>
+                <Input value={noteForm.link} onChange={e => setNoteForm({ ...noteForm, link: e.target.value })} placeholder="https://drive.google.com/..." />
+              </div>
+            </div>
+            <p className="text-xs text-muted-foreground">Note: File upload is saved to the database and will be available to users for download.</p>
           </div>
           <div className="mt-4 flex gap-2 justify-end">
             <Button variant="outline" size="sm" onClick={() => resetNoteDialog()}>Cancel</Button>

@@ -28,7 +28,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const { db } = await connectToDatabase();
 
     if (req.method === 'POST') {
-      const { title, description, courseId, link, uploadedBy, category } = req.body;
+      const { title, description, courseId, link, uploadedBy, category, fileUrl } = req.body;
 
       if (!title || !courseId || !uploadedBy) {
         return res.status(400).json({ error: 'Missing required fields: title, courseId, uploadedBy' });
@@ -47,7 +47,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         courseId: noteCourseId,
         category: category || '',
         link: link || '',
-        fileUrl: link || '',
+        fileUrl: fileUrl || link || '',
         uploadedBy,
         createdAt: new Date(),
         uploadDate: new Date().toISOString(),
@@ -61,7 +61,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     if (req.method === 'PUT') {
-      const { id, title, description, courseId, category, link } = req.body;
+      const { id, title, description, courseId, category, link, fileUrl } = req.body;
 
       if (!id) {
         return res.status(400).json({ error: 'Note id is required for update' });
@@ -77,7 +77,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       if (category !== undefined) updatePayload.category = category;
       if (link !== undefined) {
         updatePayload.link = link;
-        updatePayload.fileUrl = link;
+      }
+      if (fileUrl !== undefined) {
+        updatePayload.fileUrl = fileUrl;
       }
       if (courseId !== undefined) {
         updatePayload.courseId = typeof courseId === 'string' && ObjectId.isValid(courseId) ? new ObjectId(courseId) : courseId;
@@ -104,7 +106,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         description: updatedNote.description,
         courseId: updatedNote.courseId?.toString ? updatedNote.courseId.toString() : updatedNote.courseId,
         category: updatedNote.category,
-        link: updatedNote.link || updatedNote.fileUrl || '',
+        link: updatedNote.link || '',
+        fileUrl: updatedNote.fileUrl || updatedNote.link || '',
         uploadedBy: updatedNote.uploadedBy,
         createdAt: updatedNote.createdAt,
         uploadDate: updatedNote.uploadDate || new Date(updatedNote.createdAt).toISOString(),

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Course, RecordedLecture } from '@/data/types';
+import { Course, RecordedLecture, CourseAdvantageSection, CourseVideo } from '@/data/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -60,8 +60,21 @@ export function CourseFormDialog({ initial, categories, onSave, onClose }: Cours
   });
 
   const [highlights, setHighlights] = useState<string[]>(initial?.highlights || ['']);
-  const [advantages, setAdvantages] = useState<string[]>(initial?.advantages || ['']);
-  const [requirements, setRequirements] = useState<string[]>(initial?.requirements || ['']);
+  const [advantageSections, setAdvantageSections] = useState<CourseAdvantageSection[]>(() => {
+    if (!initial?.advantages) return [{ title: '', videos: [{ title: '', videoUrl: '' }] }];
+    return initial.advantages.map((adv) => {
+      if (typeof adv === 'string') {
+        return {
+          title: adv,
+          videos: (initial.requirements || []).map((req) => ({ title: req, videoUrl: '' })),
+        };
+      }
+      return {
+        title: adv.title || '',
+        videos: adv.videos?.length ? adv.videos : [{ title: '', videoUrl: '' }],
+      };
+    });
+  });
   const [targetAudience, setTargetAudience] = useState<string[]>(initial?.targetAudience || ['']);
   const [tags, setTags] = useState<string>(initial?.tags?.join(', ') || '');
 
@@ -86,11 +99,40 @@ export function CourseFormDialog({ initial, categories, onSave, onClose }: Cours
     try {
       const formData = new FormData();
       formData.append('file', file);
+      formData.append('type', 'course-image');
       const response = await fetch('/api/upload', { method: 'POST', body: formData });
       if (response.ok) {
         const data = await response.json();
         setForm(prev => ({ ...prev, image: data.url }));
         toast.success('Image uploaded!');
+      } else {
+        toast.error('Upload failed');
+      }
+    } catch {
+      toast.error('Upload failed');
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleVideoUpload = async (file: File, sectionIndex: number, videoIndex: number) => {
+    setUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('type', 'video');
+      const response = await fetch('/api/upload', { method: 'POST', body: formData });
+      if (response.ok) {
+        const data = await response.json();
+        setAdvantageSections((prev) => {
+          const next = [...prev];
+          const section = next[sectionIndex];
+          if (section) {
+            section.videos = section.videos.map((video, idx) => idx === videoIndex ? { ...video, videoUrl: data.url } : video);
+          }
+          return next;
+        });
+        toast.success('Video uploaded!');
       } else {
         toast.error('Upload failed');
       }
@@ -118,6 +160,52 @@ export function CourseFormDialog({ initial, categories, onSave, onClose }: Cours
   const removeListItem = (list: string[], setList: (v: string[]) => void, idx: number) =>
     setList(list.filter((_, i) => i !== idx));
 
+  const updateAdvantageSection = (idx: number, updates: Partial<CourseAdvantageSection>) => {
+    setAdvantageSections((prev) => {
+      const next = [...prev];
+      next[idx] = { ...next[idx], ...updates };
+      return next;
+    });
+  };
+
+  const addAdvantageSection = () => {
+    setAdvantageSections((prev) => [...prev, { title: '', videos: [{ title: '', videoUrl: '' }] }]);
+  };
+
+  const removeAdvantageSection = (idx: number) => {
+    setAdvantageSections((prev) => prev.filter((_, i) => i !== idx));
+  };
+
+  const addVideoToSection = (sectionIndex: number) => {
+    setAdvantageSections((prev) => {
+      const next = [...prev];
+      if (next[sectionIndex]) {
+        next[sectionIndex].videos = [...next[sectionIndex].videos, { title: '', videoUrl: '' }];
+      }
+      return next;
+    });
+  };
+
+  const updateVideoInSection = (sectionIndex: number, videoIndex: number, updates: Partial<CourseVideo>) => {
+    setAdvantageSections((prev) => {
+      const next = [...prev];
+      if (next[sectionIndex]) {
+        next[sectionIndex].videos = next[sectionIndex].videos.map((video, idx) => idx === videoIndex ? { ...video, ...updates } : video);
+      }
+      return next;
+    });
+  };
+
+  const removeVideoFromSection = (sectionIndex: number, videoIndex: number) => {
+    setAdvantageSections((prev) => {
+      const next = [...prev];
+      if (next[sectionIndex]) {
+        next[sectionIndex].videos = next[sectionIndex].videos.filter((_, idx) => idx !== videoIndex);
+      }
+      return next;
+    });
+  };
+
   const handleSave = () => {
     if (!form.title || !form.category) {
       toast.error('Title and category are required.');
@@ -129,8 +217,12 @@ export function CourseFormDialog({ initial, categories, onSave, onClose }: Cours
       price: Math.max(0, parseFloat(form.price) || 0),
       originalPrice: form.originalPrice ? Math.max(0, parseFloat(form.originalPrice)) : undefined,
       highlights: highlights.filter(Boolean),
-      advantages: advantages.filter(Boolean),
-      requirements: requirements.filter(Boolean),
+      advantages: advantageSections
+        .filter(section => section.title.trim())
+        .map(section => ({
+          title: section.title,
+          videos: section.videos.filter(video => video.title.trim()),
+        })),
       targetAudience: targetAudience.filter(Boolean),
       tags: tags.split(',').map(t => t.trim()).filter(Boolean),
       modulesList: modulesList.filter(m => m.title),
@@ -259,31 +351,71 @@ export function CourseFormDialog({ initial, categories, onSave, onClose }: Cours
               </div>
             </div>
             <div>
-              <label className="text-xs font-medium text-muted-foreground mb-2 block">Key Advantages</label>
-              <div className="space-y-2">
-                {advantages.map((a, i) => (
-                  <div key={i} className="flex gap-2">
-                    <Input value={a} onChange={e => updateList(advantages, setAdvantages, i, e.target.value)} placeholder={`Advantage ${i + 1}`} />
-                    <button onClick={() => removeListItem(advantages, setAdvantages, i)} className="text-muted-foreground hover:text-destructive"><Trash2 className="h-4 w-4" /></button>
-                  </div>
-                ))}
-                <Button variant="outline" size="sm" onClick={() => addListItem(advantages, setAdvantages)} className="text-xs gap-1">
-                  <Plus className="h-3 w-3" /> Add Advantage
+              <div className="flex items-center justify-between mb-2">
+                <label className="text-xs font-medium text-muted-foreground">Course Sections</label>
+                <Button variant="outline" size="sm" className="text-xs gap-1" onClick={addAdvantageSection}>
+                  <Plus className="h-3 w-3" /> Add Section
                 </Button>
               </div>
-            </div>
-            <div>
-              <label className="text-xs font-medium text-muted-foreground mb-2 block">Requirements / Prerequisites</label>
-              <div className="space-y-2">
-                {requirements.map((r, i) => (
-                  <div key={i} className="flex gap-2">
-                    <Input value={r} onChange={e => updateList(requirements, setRequirements, i, e.target.value)} placeholder={`Requirement ${i + 1}`} />
-                    <button onClick={() => removeListItem(requirements, setRequirements, i)} className="text-muted-foreground hover:text-destructive"><Trash2 className="h-4 w-4" /></button>
+              <div className="space-y-4">
+                {advantageSections.map((section, si) => (
+                  <div key={si} className="rounded-lg border border-border p-3 space-y-3">
+                    <div className="flex items-center gap-2">
+                      <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary/10 text-xs font-bold text-primary">
+                        {si + 1}
+                      </span>
+                      <Input
+                        value={section.title}
+                        onChange={e => updateAdvantageSection(si, { title: e.target.value })}
+                        placeholder="Section title"
+                        className="flex-1"
+                      />
+                      <button onClick={() => removeAdvantageSection(si)} className="text-muted-foreground hover:text-destructive">
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
+                    <div className="space-y-3">
+                      {section.videos.map((video, vi) => (
+                        <div key={vi} className="rounded-lg border border-border bg-muted/10 p-3">
+                          <div className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_auto]">
+                            <Input
+                              value={video.title}
+                              onChange={e => updateVideoInSection(si, vi, { title: e.target.value })}
+                              placeholder="Video title"
+                              className="w-full"
+                            />
+                            <div className="flex items-center gap-2">
+                              <label className="rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground cursor-pointer hover:bg-primary/90">
+                                Upload Video
+                                <input
+                                  type="file"
+                                  accept="video/*"
+                                  onChange={(e) => {
+                                    const file = e.target.files?.[0];
+                                    if (file) handleVideoUpload(file, si, vi);
+                                  }}
+                                  className="sr-only"
+                                />
+                              </label>
+                              <button
+                                onClick={() => removeVideoFromSection(si, vi)}
+                                className="text-muted-foreground hover:text-destructive"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </button>
+                            </div>
+                          </div>
+                          {video.videoUrl && (
+                            <p className="text-xs text-muted-foreground truncate">Uploaded: {video.videoUrl}</p>
+                          )}
+                        </div>
+                      ))}
+                      <Button variant="outline" size="sm" className="text-xs gap-1" onClick={() => addVideoToSection(si)}>
+                        <Plus className="h-3 w-3" /> Add Video
+                      </Button>
+                    </div>
                   </div>
                 ))}
-                <Button variant="outline" size="sm" onClick={() => addListItem(requirements, setRequirements)} className="text-xs gap-1">
-                  <Plus className="h-3 w-3" /> Add Requirement
-                </Button>
               </div>
             </div>
             <div>
