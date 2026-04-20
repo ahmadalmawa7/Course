@@ -14,12 +14,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     if (req.method === 'POST') {
+      console.log('POST request received:', req.body);
       const course = req.body;
       if (!course || !course.title || !course.category) {
+        console.log('Invalid course payload:', course);
         return res.status(400).json({ error: 'Invalid course payload' });
       }
+      console.log('Inserting course:', course);
       await collection.insertOne({ ...course, createdAt: new Date(), updatedAt: new Date() });
       const inserted = await collection.findOne({ title: course.title, instructor: course.instructor });
+      console.log('Inserted course:', inserted);
       res.status(201).json(inserted);
       return;
     }

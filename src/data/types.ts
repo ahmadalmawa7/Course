@@ -16,11 +16,12 @@ export interface CourseReview {
 
 export interface RecordedLecture {
   id: string;
-  moduleIndex: number;
-  title: string;
+  moduleName: string;
+  lectureTitle: string;
   duration: string;
   videoUrl: string;
-  isPreview: boolean;
+  preview: boolean;
+  thumbnail?: string;
 }
 
 export interface CourseVideo {
@@ -50,7 +51,7 @@ export interface Course {
   enrolled: number;
   rating: number;
   totalRatings?: number;
-  modulesList: CourseModule[];
+  modulesList: string[];
   // Rich fields
   highlights?: string[];          // "What you'll learn" bullet points
   whyTake?: string;               // Why this course paragraph
@@ -66,6 +67,7 @@ export interface Course {
   syllabus?: string;              // Long-form syllabus text
   tags?: string[];
   lastUpdated?: string;
+  assignments?: Assignment[];
 }
 
 export interface LiveClass {
@@ -207,4 +209,12 @@ export interface LectureProgress {
   completed: boolean;
   watchTime: number;
   completedAt?: string;
+}
+
+export interface Assignment {
+  id: string;
+  title: string;
+  fileUrl: string;
+  courseId: string;
+  createdAt: string;
 }

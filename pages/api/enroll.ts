@@ -71,6 +71,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       }
     );
 
+    // Increment enrolled students count in course
+    await db.collection('courses').updateOne(
+      { _id: new ObjectId(courseId) },
+      { $inc: { enrolled: 1 } }
+    );
+
     // Fetch updated user
     const updatedUser = await db.collection('users').findOne({ _id: new ObjectId(userId) });
 

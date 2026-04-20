@@ -56,7 +56,7 @@ interface DataContextType {
   addCategory: (category: string) => void;
   updateCategory: (oldCategory: string, newCategory: string) => void;
   deleteCategory: (category: string) => void;
-  enrollCourse: (userId: string, courseId: string) => Promise<void>;
+  enrollCourse: (userId: string, courseId: string) => Promise<any>;
   refetchUserEnrollments: (userId: string) => Promise<void>;
   updateProgress: (userId: string, courseId: string, lectureId: string, completed: boolean, watchTime?: number) => Promise<void>;
   getCourseProgress: (userId: string, courseId: string) => number;
@@ -91,12 +91,20 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
             setCourses(data.map((item: any) => ({
               ...item,
               id: item._id ? item._id.toString() : item.id,
-              modulesList: item.modulesList || [],
+              modulesList: (item.modulesList || []).map((m: any) => typeof m === 'string' ? m : m.title || '').filter(Boolean),
               highlights: item.highlights || [],
               advantages: item.advantages || [],
               requirements: item.requirements || [],
               targetAudience: item.targetAudience || [],
-              recordedLectures: item.recordedLectures || [],
+              recordedLectures: (item.recordedLectures || []).map((lec: any) => ({
+                id: lec.id || `rl-${Date.now()}`,
+                moduleName: lec.moduleName || '',
+                lectureTitle: lec.lectureTitle || lec.title || '',
+                duration: lec.duration || '',
+                videoUrl: lec.videoUrl || '',
+                preview: lec.preview !== undefined ? lec.preview : lec.isPreview || false,
+                thumbnail: lec.thumbnail || '',
+              })),
               reviews: item.reviews || [],
               tags: item.tags || [],
             })));
@@ -392,6 +400,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
         }]);
         // Refetch to sync with backend
         setTimeout(() => refetchUserEnrollments(userId), 500);
+        return data.user; // Return updated user for AuthContext sync
       } else {
         throw new Error(data.message || 'Failed to enroll');
       }
@@ -472,13 +481,20 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const isEnrolled = (userId: string, courseId: string): boolean => {
-    // Check DataContext enrollments
-    const hasEnrollment = enrollments.some(e => e.userId === userId && e.courseId === courseId);
+    // Check DataContext enrollments with flexible courseId comparison
+    const hasEnrollment = enrollments.some(e => {
+      const eUserId = e.userId?.toString() || e.userId;
+      const eCourseId = e.courseId?.toString() || e.courseId;
+      return eUserId === userId && (eCourseId === courseId || eCourseId === courseId.toString());
+    });
     if (hasEnrollment) return true;
 
     // Also check auth user's enrolledCourses for immediate feedback after enrollment
-    if (user?.id === userId && user?.enrolledCourses?.includes(courseId)) {
-      return true;
+    if (user?.id === userId && user?.enrolledCourses) {
+      const enrolledCourses = user.enrolledCourses.map((c: any) => c?.toString() || c);
+      if (enrolledCourses.includes(courseId) || enrolledCourses.includes(courseId.toString())) {
+        return true;
+      }
     }
 
     return false;

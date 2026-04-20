@@ -1,20 +1,34 @@
 import { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useData } from '@/contexts/DataContext';
-import { Clock, Star, Users, BookOpen, Search } from 'lucide-react';
+import { useAuth } from '@/contexts/AuthContext';
+import { Clock, Star, Users, BookOpen, Search, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { toast } from 'sonner';
 
 const CoursesPage = () => {
-  const { courses, categories } = useData();
+  const { courses, categories, isEnrolled, enrollCourse, refetchUserEnrollments } = useData();
+  const { user, updateUser } = useAuth();
+  const navigate = useNavigate();
   const [activeCategory, setActiveCategory] = useState('All');
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedQuery, setDebouncedQuery] = useState('');
+  const [enrollingCourseId, setEnrollingCourseId] = useState<string | null>(null);
 
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedQuery(searchQuery), 300);
     return () => clearTimeout(timer);
   }, [searchQuery]);
+
+  // Load user enrollments when page mounts
+  useEffect(() => {
+    const userId = user?.id || (user as any)?._id?.toString();
+    if (userId) {
+      refetchUserEnrollments(userId);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id]);
 
   const filteredBySearch = courses.filter(course =>
     course.title.toLowerCase().includes(debouncedQuery.toLowerCase()) ||
@@ -23,6 +37,34 @@ const CoursesPage = () => {
   );
 
   const filtered = activeCategory === 'All' ? filteredBySearch : filteredBySearch.filter((c) => c.category === activeCategory);
+
+  const handleEnroll = async (courseId: string) => {
+    if (!user) {
+      navigate('/login');
+      return;
+    }
+
+    const userId = user.id || (user as any)._id?.toString();
+    if (!userId) {
+      toast.error('User ID not found');
+      return;
+    }
+
+    setEnrollingCourseId(courseId);
+    try {
+      const enrolledUser = await enrollCourse(userId, courseId);
+      if (enrolledUser) {
+        updateUser(enrolledUser);
+      }
+      toast.success('Enrolled Successfully! 🎉');
+      navigate(`/courses/${courseId}`);
+    } catch (error) {
+      toast.error('Failed to enroll. Please try again.');
+      console.error('Enrollment error:', error);
+    } finally {
+      setEnrollingCourseId(null);
+    }
+  };
 
   return (
     <div>
@@ -70,36 +112,60 @@ const CoursesPage = () => {
             </div>
           ) : (
             <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-              {filtered.map((course) => (
-              <Link key={course.id} to={`/courses/${course.id}`} className="group">
-                <div className="h-full rounded-lg border border-border bg-card p-6 transition-all hover:border-gold/50 hover:shadow-lg">
-                  <div className="mb-4 h-40 overflow-hidden rounded-lg bg-slate-100">
-                    <img
-                      src={course.image || '/placeholder.svg'}
-                      alt={course.title}
-                      className="h-full w-full object-cover"
-                      onError={(e) => { (e.target as HTMLImageElement).src = '/placeholder.svg'; }}
-                    />
+              {filtered.map((course) => {
+                const userId = user?.id || (user as any)?._id?.toString() || '';
+                const authEnrolledCourses = user?.enrolledCourses?.map((c: any) => c?.toString()) || [];
+                const isUserEnrolled = Boolean(
+                  user &&
+                  (isEnrolled(userId, course.id) || authEnrolledCourses.includes(course.id))
+                );
+                return (
+                  <div key={course.id} className="h-full rounded-lg border border-border bg-card p-6 transition-all hover:border-gold/50 hover:shadow-lg">
+                    <Link to={`/courses/${course.id}`} className="block">
+                      <div className="mb-4 h-40 overflow-hidden rounded-lg bg-slate-100">
+                        <img
+                          src={course.image || '/placeholder.svg'}
+                          alt={course.title}
+                          className="h-full w-full object-cover"
+                          onError={(e) => { (e.target as HTMLImageElement).src = '/placeholder.svg'; }}
+                        />
+                      </div>
+                      <div className="mb-3 flex items-center justify-between">
+                        <span className="rounded-sm bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">{course.category}</span>
+                        <span className="rounded-sm bg-muted px-2 py-0.5 text-xs text-muted-foreground">{course.level}</span>
+                      </div>
+                      <h3 className="mb-2 font-heading text-lg font-semibold text-card-foreground group-hover:text-primary transition-colors">{course.title}</h3>
+                      <p className="mb-4 text-sm text-muted-foreground line-clamp-2">{course.description}</p>
+                      <div className="mb-4 grid grid-cols-2 gap-2 text-xs text-muted-foreground">
+                        <span className="flex items-center gap-1"><Clock className="h-3 w-3" /> {course.duration}</span>
+                        <span className="flex items-center gap-1"><BookOpen className="h-3 w-3" /> {course.modules} modules</span>
+                        <span className="flex items-center gap-1"><Users className="h-3 w-3" /> {course.enrolled} enrolled</span>
+                        <span className="flex items-center gap-1"><Star className="h-3 w-3 text-gold" /> {course.rating}</span>
+                      </div>
+                      <div className="flex items-center justify-between border-t border-border pt-3">
+                        <span className="font-heading text-xl font-bold text-primary">₹{course.price.toLocaleString()}</span>
+                        <span className="text-xs text-muted-foreground">{course.instructor.split(',')[0]}</span>
+                      </div>
+                    </Link>
+                    <Button
+                      onClick={() => isUserEnrolled ? navigate(`/courses/${course.id}`) : handleEnroll(course.id)}
+                      disabled={enrollingCourseId === course.id}
+                      className="mt-4 w-full bg-primary hover:bg-primary/90 text-primary-foreground font-semibold transition-all"
+                    >
+                      {enrollingCourseId === course.id ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          Enrolling...
+                        </>
+                      ) : isUserEnrolled ? (
+                        'Continue Learning'
+                      ) : (
+                        'Enroll Now'
+                      )}
+                    </Button>
                   </div>
-                  <div className="mb-3 flex items-center justify-between">
-                    <span className="rounded-sm bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">{course.category}</span>
-                    <span className="rounded-sm bg-muted px-2 py-0.5 text-xs text-muted-foreground">{course.level}</span>
-                  </div>
-                  <h3 className="mb-2 font-heading text-lg font-semibold text-card-foreground group-hover:text-primary transition-colors">{course.title}</h3>
-                  <p className="mb-4 text-sm text-muted-foreground line-clamp-2">{course.description}</p>
-                  <div className="mb-4 grid grid-cols-2 gap-2 text-xs text-muted-foreground">
-                    <span className="flex items-center gap-1"><Clock className="h-3 w-3" /> {course.duration}</span>
-                    <span className="flex items-center gap-1"><BookOpen className="h-3 w-3" /> {course.modules} modules</span>
-                    <span className="flex items-center gap-1"><Users className="h-3 w-3" /> {course.enrolled} enrolled</span>
-                    <span className="flex items-center gap-1"><Star className="h-3 w-3 text-gold" /> {course.rating}</span>
-                  </div>
-                  <div className="flex items-center justify-between border-t border-border pt-3">
-                    <span className="font-heading text-xl font-bold text-primary">₹{course.price.toLocaleString()}</span>
-                    <span className="text-xs text-muted-foreground">{course.instructor.split(',')[0]}</span>
-                  </div>
-                </div>
-              </Link>
-            ))}
+                );
+              })}
           </div>
           )}
         </div>

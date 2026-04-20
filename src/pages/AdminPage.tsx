@@ -172,8 +172,11 @@ const AdminPage = () => {
 
   const handleSaveCourse = async (data: Partial<Course>) => {
   try {
+    let courseId: string;
+    
     if (courseDialog.editing) {
       await updateCourse(courseDialog.editing.id, data);
+      courseId = courseDialog.editing.id;
       toast.success('Course updated!');
     } else {
       const newCourse: Course = {
@@ -204,10 +207,64 @@ const AdminPage = () => {
         certificate: data.certificate ?? true,
         liveSessionsIncluded: data.liveSessionsIncluded ?? true,
         notesIncluded: data.notesIncluded ?? true,
+        assignments: data.assignments,
       };
 
       await addCourse(newCourse);
+      courseId = newCourse.id;
       toast.success('Course added!');
+    }
+
+    // Save assignments to the assignments collection
+    if (data.assignments && data.assignments.length > 0) {
+      let savedCount = 0;
+      
+      // If editing, delete existing assignments for this course first
+      if (courseDialog.editing) {
+        try {
+          const existingAssignments = await fetch(`/api/assignments?courseId=${courseId}`);
+          if (existingAssignments.ok) {
+            const existingData = await existingAssignments.json();
+            for (const existing of existingData) {
+              await fetch('/api/assignments', {
+                method: 'DELETE',
+                headers: {
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ id: existing.id }),
+              });
+            }
+          }
+        } catch (error) {
+          console.error('Failed to delete existing assignments:', error);
+        }
+      }
+      
+      // Create new assignments
+      for (const assignment of data.assignments) {
+        try {
+          const response = await fetch('/api/assignments', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              title: assignment.title,
+              fileUrl: assignment.fileUrl,
+              courseId: courseId, // Always use the current course ID
+            }),
+          });
+          if (response.ok) {
+            savedCount++;
+          }
+        } catch (error) {
+          console.error('Failed to save assignment:', error);
+        }
+      }
+      
+      if (savedCount > 0) {
+        toast.success(`${savedCount} assignment(s) saved successfully!`);
+      }
     }
 
     setCourseDialog({ open: false, editing: null });
@@ -353,6 +410,7 @@ const AdminPage = () => {
       category: note.category || '',
       description: note.description || '',
       link: note.link || note.fileUrl || '',
+      fileUrl: note.fileUrl || '',
     });
     setNoteDialog(true);
   };

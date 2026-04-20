@@ -9,7 +9,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 
-const TABS = ['Overview', 'Lectures', 'Notes', 'Assignments'] as const;
+const TABS = ['Overview', 'Notes', 'Assignments'] as const;
 type Tab = typeof TABS[number];
 
 const CourseLearningPage = () => {
@@ -25,6 +25,9 @@ const CourseLearningPage = () => {
   const [courseNotes, setCourseNotes] = useState<any[]>([]);
   const [notesLoading, setNotesLoading] = useState(false);
   const [notesError, setNotesError] = useState('');
+  const [assignments, setAssignments] = useState<any[]>([]);
+  const [assignmentsLoading, setAssignmentsLoading] = useState(false);
+  const [assignmentsError, setAssignmentsError] = useState('');
 
   const course = courses.find((c) => c.id === id);
   const isUserEnrolled = user && isEnrolled(user.id, id || '');
@@ -131,6 +134,47 @@ const CourseLearningPage = () => {
       fetchNotes();
     }
   }, [activeTab, id, user]);
+
+  useEffect(() => {
+    const fetchAssignments = async () => {
+      if (!id) return;
+      setAssignmentsLoading(true);
+      setAssignmentsError('');
+      setAssignments([]);
+
+      if (!user) {
+        setAssignmentsError('Please sign up/login to access assignments');
+        setAssignmentsLoading(false);
+        return;
+      }
+
+      try {
+        const response = await fetch(`/api/assignments?courseId=${encodeURIComponent(id)}`);
+        const data = await response.json();
+
+        if (!response.ok) {
+          setAssignmentsError(data.error || 'Failed to load assignments');
+          setAssignments([]);
+        } else {
+          const apiAssignments = Array.isArray(data) ? data : [];
+          // If no assignments from API, try fallback to course document
+          if (apiAssignments.length === 0 && course?.assignments) {
+            setAssignments(course.assignments);
+          } else {
+            setAssignments(apiAssignments);
+          }
+        }
+      } catch (error) {
+        setAssignmentsError('Failed to load assignments');
+      } finally {
+        setAssignmentsLoading(false);
+      }
+    };
+
+    if (activeTab === 'Assignments') {
+      fetchAssignments();
+    }
+  }, [activeTab, id, user, course]);
 
   if (!course) {
     return (
@@ -271,12 +315,6 @@ const CourseLearningPage = () => {
                     )}
                   </div>
                 )}
-                {activeTab === 'Lectures' && (
-                  <div className="text-center text-muted-foreground">
-                    <BookOpen className="mx-auto mb-2 h-8 w-8" />
-                    <p>Select lectures from the sidebar to view details</p>
-                  </div>
-                )}
                 {activeTab === 'Notes' && (
                   <div>
                     {notesLoading ? (
@@ -344,9 +382,46 @@ const CourseLearningPage = () => {
                   </div>
                 )}
                 {activeTab === 'Assignments' && (
-                  <div className="text-center text-muted-foreground">
-                    <FileText className="mx-auto mb-2 h-8 w-8" />
-                    <p>Assignments will be available here</p>
+                  <div>
+                    {assignmentsLoading ? (
+                      <div className="text-center text-muted-foreground">
+                        <FileText className="mx-auto mb-2 h-8 w-8" />
+                        <p>Loading assignments...</p>
+                      </div>
+                    ) : assignmentsError ? (
+                      <div className="text-center text-muted-foreground">
+                        <FileText className="mx-auto mb-2 h-8 w-8" />
+                        <p>{assignmentsError}</p>
+                      </div>
+                    ) : assignments.length === 0 ? (
+                      <div className="text-center text-muted-foreground">
+                        <FileText className="mx-auto mb-2 h-8 w-8" />
+                        <p>Assignments will be available here</p>
+                      </div>
+                    ) : (
+                      <div className="space-y-4">
+                        {assignments.map((assignment) => (
+                          <div key={assignment.id} className="rounded-lg border border-border bg-card p-4">
+                            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                              <div>
+                                <h3 className="text-base font-semibold text-card-foreground">{assignment.title}</h3>
+                                <p className="text-xs text-muted-foreground mt-2">{new Date(assignment.createdAt).toLocaleString()}</p>
+                              </div>
+                              <div className="flex flex-col items-start gap-2 sm:items-end">
+                                <a
+                                  href={assignment.fileUrl}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="inline-flex items-center gap-1 rounded-md bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground hover:bg-primary/90"
+                                >
+                                  <ExternalLink className="h-3 w-3" /> Open Assignment
+                                </a>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 )}
               </div>

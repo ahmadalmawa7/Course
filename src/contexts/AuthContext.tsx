@@ -12,6 +12,7 @@ interface AuthContextType {
   enrollInCourse: (courseId: string) => Promise<void>;
   updateProgress: (courseId: string, progress: number) => Promise<void>;
   updateProfile: (data: Partial<User>) => Promise<boolean>;
+  updateUser: (userData: Partial<User>) => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -178,6 +179,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
+  const updateUser = (userData: Partial<User>) => {
+    if (user) {
+      setUser({ ...user, ...userData });
+    }
+  };
+
   React.useEffect(() => {
     if (typeof window === 'undefined') return;
     if (user) {
@@ -193,7 +200,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   }, [isAdmin]);
 
   return (
-    <AuthContext.Provider value={{ user, isAdmin, login, adminLogin, register, logout, enrollInCourse, updateProgress, updateProfile }}>
+    <AuthContext.Provider value={{ user, isAdmin, login, adminLogin, register, logout, enrollInCourse, updateProgress, updateProfile, updateUser }}>
       {children}
     </AuthContext.Provider>
   );

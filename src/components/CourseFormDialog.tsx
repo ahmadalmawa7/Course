@@ -32,7 +32,7 @@ interface CourseFormDialogProps {
   onClose: () => void;
 }
 
-type TabKey = 'basic' | 'details' | 'curriculum' | 'media';
+type TabKey = 'basic' | 'details' | 'curriculum' | 'media' | 'assignments';
 
 export function CourseFormDialog({ initial, categories, onSave, onClose }: CourseFormDialogProps) {
   const [tab, setTab] = useState<TabKey>('basic');
@@ -60,39 +60,50 @@ export function CourseFormDialog({ initial, categories, onSave, onClose }: Cours
   });
 
   const [highlights, setHighlights] = useState<string[]>(initial?.highlights || ['']);
-  const [advantageSections, setAdvantageSections] = useState<CourseAdvantageSection[]>(() => {
-    if (!initial?.advantages) return [{ title: '', videos: [{ title: '', videoUrl: '' }] }];
-    return initial.advantages.map((adv) => {
-      if (typeof adv === 'string') {
-        return {
-          title: adv,
-          videos: (initial.requirements || []).map((req) => ({ title: req, videoUrl: '' })),
-        };
-      }
-      return {
-        title: adv.title || '',
-        videos: adv.videos?.length ? adv.videos : [{ title: '', videoUrl: '' }],
-      };
-    });
-  });
   const [targetAudience, setTargetAudience] = useState<string[]>(initial?.targetAudience || ['']);
   const [tags, setTags] = useState<string>(initial?.tags?.join(', ') || '');
 
-  const [modulesList, setModulesList] = useState(
-    initial?.modulesList?.length
-      ? initial.modulesList
-      : [{ title: '', lessons: 1, duration: '1 hr', topics: [] as string[] }]
+  const [modulesList, setModulesList] = useState<string[]>(
+    (initial?.modulesList || []).map((m: any) => typeof m === 'string' ? m : m.title || '').filter(Boolean)
   );
 
   const [lectures, setLectures] = useState<RecordedLecture[]>(
-    initial?.recordedLectures || []
+    (initial?.recordedLectures || []).map((lec: any) => ({
+      id: lec.id || `rl-${Date.now()}`,
+      moduleName: lec.moduleName || (modulesList[lec.moduleIndex || 0] || ''),
+      lectureTitle: lec.lectureTitle || lec.title || '',
+      duration: lec.duration || '',
+      videoUrl: lec.videoUrl || '',
+      preview: lec.preview !== undefined ? lec.preview : lec.isPreview || false,
+      thumbnail: lec.thumbnail || '',
+    }))
   );
+
+  const [assignments, setAssignments] = useState<{ id: string; title: string; fileUrl: string; courseId: string; createdAt: string }[]>(
+    initial?.assignments ? initial.assignments.map((a: any) => ({ id: a.id || `temp-${Date.now()}-${Math.random()}`, title: a.title, fileUrl: a.fileUrl, courseId: a.courseId, createdAt: a.createdAt || new Date().toISOString() })) : []
+  );
+  const [allCourses, setAllCourses] = useState<Course[]>([]);
 
   useEffect(() => {
     if (!initial && categories.filter(c => c !== 'All').length > 0) {
       setForm(prev => ({ ...prev, category: categories.filter(c => c !== 'All')[0] }));
     }
   }, [categories, initial]);
+
+  useEffect(() => {
+    const fetchCourses = async () => {
+      try {
+        const response = await fetch('/api/courses');
+        if (response.ok) {
+          const coursesData = await response.json();
+          setAllCourses(coursesData);
+        }
+      } catch (error) {
+        console.error('Failed to fetch courses:', error);
+      }
+    };
+    fetchCourses();
+  }, []);
 
   const handleImageUpload = async (file: File) => {
     setUploading(true);
@@ -105,34 +116,6 @@ export function CourseFormDialog({ initial, categories, onSave, onClose }: Cours
         const data = await response.json();
         setForm(prev => ({ ...prev, image: data.url }));
         toast.success('Image uploaded!');
-      } else {
-        toast.error('Upload failed');
-      }
-    } catch {
-      toast.error('Upload failed');
-    } finally {
-      setUploading(false);
-    }
-  };
-
-  const handleVideoUpload = async (file: File, sectionIndex: number, videoIndex: number) => {
-    setUploading(true);
-    try {
-      const formData = new FormData();
-      formData.append('file', file);
-      formData.append('type', 'video');
-      const response = await fetch('/api/upload', { method: 'POST', body: formData });
-      if (response.ok) {
-        const data = await response.json();
-        setAdvantageSections((prev) => {
-          const next = [...prev];
-          const section = next[sectionIndex];
-          if (section) {
-            section.videos = section.videos.map((video, idx) => idx === videoIndex ? { ...video, videoUrl: data.url } : video);
-          }
-          return next;
-        });
-        toast.success('Video uploaded!');
       } else {
         toast.error('Upload failed');
       }
@@ -160,48 +143,18 @@ export function CourseFormDialog({ initial, categories, onSave, onClose }: Cours
   const removeListItem = (list: string[], setList: (v: string[]) => void, idx: number) =>
     setList(list.filter((_, i) => i !== idx));
 
-  const updateAdvantageSection = (idx: number, updates: Partial<CourseAdvantageSection>) => {
-    setAdvantageSections((prev) => {
+  const addAssignment = () => {
+    setAssignments([...assignments, { id: `temp-${Date.now()}-${Math.random()}`, title: '', fileUrl: '', courseId: initial?.id || '', createdAt: new Date().toISOString() }]);
+  };
+
+  const removeAssignment = (idx: number) => {
+    setAssignments(assignments.filter((_, i) => i !== idx));
+  };
+
+  const updateAssignment = (idx: number, updates: Partial<{ id: string; title: string; fileUrl: string; courseId: string; createdAt: string }>) => {
+    setAssignments((prev) => {
       const next = [...prev];
       next[idx] = { ...next[idx], ...updates };
-      return next;
-    });
-  };
-
-  const addAdvantageSection = () => {
-    setAdvantageSections((prev) => [...prev, { title: '', videos: [{ title: '', videoUrl: '' }] }]);
-  };
-
-  const removeAdvantageSection = (idx: number) => {
-    setAdvantageSections((prev) => prev.filter((_, i) => i !== idx));
-  };
-
-  const addVideoToSection = (sectionIndex: number) => {
-    setAdvantageSections((prev) => {
-      const next = [...prev];
-      if (next[sectionIndex]) {
-        next[sectionIndex].videos = [...next[sectionIndex].videos, { title: '', videoUrl: '' }];
-      }
-      return next;
-    });
-  };
-
-  const updateVideoInSection = (sectionIndex: number, videoIndex: number, updates: Partial<CourseVideo>) => {
-    setAdvantageSections((prev) => {
-      const next = [...prev];
-      if (next[sectionIndex]) {
-        next[sectionIndex].videos = next[sectionIndex].videos.map((video, idx) => idx === videoIndex ? { ...video, ...updates } : video);
-      }
-      return next;
-    });
-  };
-
-  const removeVideoFromSection = (sectionIndex: number, videoIndex: number) => {
-    setAdvantageSections((prev) => {
-      const next = [...prev];
-      if (next[sectionIndex]) {
-        next[sectionIndex].videos = next[sectionIndex].videos.filter((_, idx) => idx !== videoIndex);
-      }
       return next;
     });
   };
@@ -217,16 +170,17 @@ export function CourseFormDialog({ initial, categories, onSave, onClose }: Cours
       price: Math.max(0, parseFloat(form.price) || 0),
       originalPrice: form.originalPrice ? Math.max(0, parseFloat(form.originalPrice)) : undefined,
       highlights: highlights.filter(Boolean),
-      advantages: advantageSections
-        .filter(section => section.title.trim())
-        .map(section => ({
-          title: section.title,
-          videos: section.videos.filter(video => video.title.trim()),
-        })),
       targetAudience: targetAudience.filter(Boolean),
       tags: tags.split(',').map(t => t.trim()).filter(Boolean),
-      modulesList: modulesList.filter(m => m.title),
+      modulesList: modulesList,
       recordedLectures: lectures,
+      assignments: assignments.filter(a => a.title && a.fileUrl && a.courseId).map(a => ({
+        id: a.id.startsWith('temp-') ? undefined : a.id,
+        title: a.title,
+        fileUrl: a.fileUrl,
+        courseId: a.courseId,
+        createdAt: a.createdAt,
+      })),
     });
   };
 
@@ -234,6 +188,7 @@ export function CourseFormDialog({ initial, categories, onSave, onClose }: Cours
     { key: 'basic', label: 'Basic Info' },
     { key: 'details', label: 'Details & Content' },
     { key: 'curriculum', label: 'Curriculum' },
+    { key: 'assignments', label: 'Assignments' },
     { key: 'media', label: 'Media & Settings' },
   ];
 
@@ -351,74 +306,6 @@ export function CourseFormDialog({ initial, categories, onSave, onClose }: Cours
               </div>
             </div>
             <div>
-              <div className="flex items-center justify-between mb-2">
-                <label className="text-xs font-medium text-muted-foreground">Course Sections</label>
-                <Button variant="outline" size="sm" className="text-xs gap-1" onClick={addAdvantageSection}>
-                  <Plus className="h-3 w-3" /> Add Section
-                </Button>
-              </div>
-              <div className="space-y-4">
-                {advantageSections.map((section, si) => (
-                  <div key={si} className="rounded-lg border border-border p-3 space-y-3">
-                    <div className="flex items-center gap-2">
-                      <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary/10 text-xs font-bold text-primary">
-                        {si + 1}
-                      </span>
-                      <Input
-                        value={section.title}
-                        onChange={e => updateAdvantageSection(si, { title: e.target.value })}
-                        placeholder="Section title"
-                        className="flex-1"
-                      />
-                      <button onClick={() => removeAdvantageSection(si)} className="text-muted-foreground hover:text-destructive">
-                        <Trash2 className="h-4 w-4" />
-                      </button>
-                    </div>
-                    <div className="space-y-3">
-                      {section.videos.map((video, vi) => (
-                        <div key={vi} className="rounded-lg border border-border bg-muted/10 p-3">
-                          <div className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_auto]">
-                            <Input
-                              value={video.title}
-                              onChange={e => updateVideoInSection(si, vi, { title: e.target.value })}
-                              placeholder="Video title"
-                              className="w-full"
-                            />
-                            <div className="flex items-center gap-2">
-                              <label className="rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground cursor-pointer hover:bg-primary/90">
-                                Upload Video
-                                <input
-                                  type="file"
-                                  accept="video/*"
-                                  onChange={(e) => {
-                                    const file = e.target.files?.[0];
-                                    if (file) handleVideoUpload(file, si, vi);
-                                  }}
-                                  className="sr-only"
-                                />
-                              </label>
-                              <button
-                                onClick={() => removeVideoFromSection(si, vi)}
-                                className="text-muted-foreground hover:text-destructive"
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </button>
-                            </div>
-                          </div>
-                          {video.videoUrl && (
-                            <p className="text-xs text-muted-foreground truncate">Uploaded: {video.videoUrl}</p>
-                          )}
-                        </div>
-                      ))}
-                      <Button variant="outline" size="sm" className="text-xs gap-1" onClick={() => addVideoToSection(si)}>
-                        <Plus className="h-3 w-3" /> Add Video
-                      </Button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-            <div>
               <label className="text-xs font-medium text-muted-foreground mb-2 block">Who Is This For (Target Audience)</label>
               <div className="space-y-2">
                 {targetAudience.map((t, i) => (
@@ -447,105 +334,13 @@ export function CourseFormDialog({ initial, categories, onSave, onClose }: Cours
               <Textarea value={form.syllabus} onChange={e => setForm({ ...form, syllabus: e.target.value })} rows={3} placeholder="Brief overview of the course structure..." />
             </div>
 
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <label className="text-xs font-medium text-muted-foreground">Modules</label>
-                <Button variant="outline" size="sm" className="text-xs gap-1" onClick={() => setModulesList([...modulesList, { title: '', lessons: 1, duration: '1 hr', topics: [] }])}>
-                  <Plus className="h-3 w-3" /> Add Module
-                </Button>
-              </div>
-              <div className="space-y-3">
-                {modulesList.map((mod, mi) => (
-                  <div key={mi} className="rounded-md border border-border p-3 space-y-2">
-                    <div className="flex gap-2 items-start">
-                      <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-bold text-primary mt-2">{mi + 1}</span>
-                      <div className="flex-1 space-y-2">
-                        <Input
-                          value={mod.title}
-                          onChange={e => {
-                            const next = [...modulesList];
-                            next[mi] = { ...next[mi], title: e.target.value };
-                            setModulesList(next);
-                          }}
-                          placeholder="Module title"
-                        />
-                        <div className="grid grid-cols-2 gap-2">
-                          <Input
-                            type="number"
-                            value={mod.lessons}
-                            onChange={e => {
-                              const next = [...modulesList];
-                              next[mi] = { ...next[mi], lessons: parseInt(e.target.value) || 1 };
-                              setModulesList(next);
-                            }}
-                            placeholder="Lessons"
-                          />
-                          <Input
-                            value={mod.duration}
-                            onChange={e => {
-                              const next = [...modulesList];
-                              next[mi] = { ...next[mi], duration: e.target.value };
-                              setModulesList(next);
-                            }}
-                            placeholder="Duration e.g. 2 hrs"
-                          />
-                        </div>
-                        {/* Topics */}
-                        <div className="space-y-1">
-                          {(mod.topics || []).map((topic, ti) => (
-                            <div key={ti} className="flex gap-2">
-                              <Input
-                                value={topic}
-                                onChange={e => {
-                                  const next = [...modulesList];
-                                  const topics = [...(next[mi].topics || [])];
-                                  topics[ti] = e.target.value;
-                                  next[mi] = { ...next[mi], topics };
-                                  setModulesList(next);
-                                }}
-                                placeholder={`Topic ${ti + 1}`}
-                                className="h-7 text-xs"
-                              />
-                              <button
-                                onClick={() => {
-                                  const next = [...modulesList];
-                                  next[mi] = { ...next[mi], topics: (next[mi].topics || []).filter((_, i) => i !== ti) };
-                                  setModulesList(next);
-                                }}
-                                className="text-muted-foreground hover:text-destructive"
-                              >
-                                <X className="h-3 w-3" />
-                              </button>
-                            </div>
-                          ))}
-                          <button
-                            onClick={() => {
-                              const next = [...modulesList];
-                              next[mi] = { ...next[mi], topics: [...(next[mi].topics || []), ''] };
-                              setModulesList(next);
-                            }}
-                            className="text-xs text-primary hover:underline"
-                          >
-                            + Add topic
-                          </button>
-                        </div>
-                      </div>
-                      <button onClick={() => setModulesList(modulesList.filter((_, i) => i !== mi))} className="text-muted-foreground hover:text-destructive mt-2">
-                        <Trash2 className="h-4 w-4" />
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
             {/* Recorded Lectures */}
             <div>
               <div className="flex items-center justify-between mb-2">
                 <label className="text-xs font-medium text-muted-foreground">Recorded Lectures</label>
                 <Button
                   variant="outline" size="sm" className="text-xs gap-1"
-                  onClick={() => setLectures([...lectures, { id: `rl-${Date.now()}`, moduleIndex: 0, title: '', duration: '', videoUrl: '', isPreview: false }])}
+                  onClick={() => setLectures([...lectures, { id: `rl-${Date.now()}`, moduleName: '', lectureTitle: '', duration: '', videoUrl: '', preview: false }])}
                 >
                   <Plus className="h-3 w-3" /> Add Lecture
                 </Button>
@@ -555,8 +350,8 @@ export function CourseFormDialog({ initial, categories, onSave, onClose }: Cours
                   <div key={lec.id} className="rounded-md border border-border p-3 space-y-2">
                     <div className="flex gap-2">
                       <Input
-                        value={lec.title}
-                        onChange={e => { const n = [...lectures]; n[li] = { ...n[li], title: e.target.value }; setLectures(n); }}
+                        value={lec.lectureTitle}
+                        onChange={e => { const n = [...lectures]; n[li] = { ...n[li], lectureTitle: e.target.value }; setLectures(n); }}
                         placeholder="Lecture title"
                         className="flex-1"
                       />
@@ -564,40 +359,118 @@ export function CourseFormDialog({ initial, categories, onSave, onClose }: Cours
                         <Trash2 className="h-4 w-4" />
                       </button>
                     </div>
-                    <div className="grid grid-cols-3 gap-2">
-                      <select
-                        value={lec.moduleIndex}
-                        onChange={e => { const n = [...lectures]; n[li] = { ...n[li], moduleIndex: parseInt(e.target.value) }; setLectures(n); }}
-                        className="h-8 text-xs rounded-md border border-input bg-background px-2"
-                      >
-                        {modulesList.map((m, mi) => (
-                          <option key={mi} value={mi}>Module {mi + 1}{m.title ? `: ${m.title.substring(0, 20)}` : ''}</option>
-                        ))}
-                      </select>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="relative">
+                        <select
+                          value={lec.moduleName}
+                          onChange={e => {
+                            const value = e.target.value;
+                            if (value === '__create_new__') {
+                              const newModule = prompt('Enter new module name:');
+                              if (newModule && newModule.trim()) {
+                                setModulesList([...modulesList, newModule.trim()]);
+                                const n = [...lectures]; n[li] = { ...n[li], moduleName: newModule.trim() }; setLectures(n);
+                              }
+                            } else {
+                              const n = [...lectures]; n[li] = { ...n[li], moduleName: value }; setLectures(n);
+                            }
+                          }}
+                          className="h-8 text-xs rounded-md border border-input bg-background px-2 w-full"
+                        >
+                          <option value="">Select Module</option>
+                          {modulesList.map((module, mi) => (
+                            <option key={mi} value={module}>{module}</option>
+                          ))}
+                          <option value="__create_new__">+ Create New Module</option>
+                        </select>
+                      </div>
                       <Input
                         value={lec.duration}
                         onChange={e => { const n = [...lectures]; n[li] = { ...n[li], duration: e.target.value }; setLectures(n); }}
                         placeholder="Duration e.g. 12:30"
                         className="h-8 text-xs"
                       />
-                      <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer">
+                    </div>
+                    <div className="flex gap-2 items-center">
+                      <Input
+                        value={lec.videoUrl}
+                        onChange={e => { const n = [...lectures]; n[li] = { ...n[li], videoUrl: e.target.value }; setLectures(n); }}
+                        placeholder="Video URL"
+                        className="text-xs flex-1"
+                      />
+                      <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer whitespace-nowrap">
                         <input
                           type="checkbox"
-                          checked={lec.isPreview}
-                          onChange={e => { const n = [...lectures]; n[li] = { ...n[li], isPreview: e.target.checked }; setLectures(n); }}
+                          checked={lec.preview}
+                          onChange={e => { const n = [...lectures]; n[li] = { ...n[li], preview: e.target.checked }; setLectures(n); }}
                           className="rounded"
                         />
                         Preview
                       </label>
                     </div>
-                    <Input
-                      value={lec.videoUrl}
-                      onChange={e => { const n = [...lectures]; n[li] = { ...n[li], videoUrl: e.target.value }; setLectures(n); }}
-                      placeholder="Video URL (optional)"
-                      className="text-xs"
-                    />
                   </div>
                 ))}
+              </div>
+              {lectures.length === 0 && (
+                <p className="text-xs text-muted-foreground text-center py-4">
+                  No lectures added yet. Click "Add Lecture" to create one.
+                </p>
+              )}
+            </div>
+          </>
+        )}
+
+        {/* ── ASSIGNMENTS ── */}
+        {tab === 'assignments' && (
+          <>
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <label className="text-xs font-medium text-muted-foreground">Assignments</label>
+                <Button variant="outline" size="sm" className="text-xs gap-1" onClick={addAssignment}>
+                  <Plus className="h-3 w-3" /> Add Assignment
+                </Button>
+              </div>
+              <div className="space-y-3">
+                {assignments.map((assignment, ai) => (
+                  <div key={ai} className="rounded-lg border border-border p-3 space-y-3">
+                    <div className="flex gap-2">
+                      <Input
+                        value={assignment.title}
+                        onChange={e => updateAssignment(ai, { title: e.target.value })}
+                        placeholder="Assignment Name"
+                        className="flex-1"
+                      />
+                      <button onClick={() => removeAssignment(ai)} className="text-muted-foreground hover:text-destructive">
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                      <Input
+                        value={assignment.fileUrl}
+                        onChange={e => updateAssignment(ai, { fileUrl: e.target.value })}
+                        placeholder="File URL or Link (PDF / Google Drive / external link)"
+                        className="text-xs"
+                      />
+                      <select
+                        value={assignment.courseId}
+                        onChange={e => updateAssignment(ai, { courseId: e.target.value })}
+                        className="h-9 text-xs rounded-md border border-input bg-background px-2"
+                      >
+                        <option value="">Select Course</option>
+                        {allCourses.map(course => (
+                          <option key={course.id} value={course.id}>
+                            {course.title}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                ))}
+                {assignments.length === 0 && (
+                  <p className="text-xs text-muted-foreground text-center py-4">
+                    No assignments added yet. Click "Add Assignment" to create one.
+                  </p>
+                )}
               </div>
             </div>
           </>

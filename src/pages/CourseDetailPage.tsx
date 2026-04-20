@@ -2,15 +2,16 @@ import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useData } from '@/contexts/DataContext';
 import { useAuth } from '@/contexts/AuthContext';
+import { RecordedLecture } from '@/data/types';
 import { Button } from '@/components/ui/button';
 import {
   Clock, BookOpen, Users, Star, Award, ArrowLeft, CheckCircle,
   Play, FileText, Lock, ChevronDown, ChevronUp, Globe, RefreshCw,
-  Video, Download, MessageCircle, ThumbsUp, Send
+  Video, Download, MessageCircle, ThumbsUp, Send, Loader2
 } from 'lucide-react';
 import { toast } from 'sonner';
 
-const TABS = ['Overview', 'Curriculum', 'Live Classes', 'Notes', 'Reviews'] as const;
+const TABS = ['Overview', 'Curriculum', 'Recorded Lectures', 'Live Classes', 'Notes', 'Reviews'] as const;
 type Tab = typeof TABS[number];
 
 const StarRating = ({ rating, size = 'sm' }: { rating: number; size?: 'sm' | 'lg' }) => {
@@ -26,29 +27,60 @@ const StarRating = ({ rating, size = 'sm' }: { rating: number; size?: 'sm' | 'lg
 
 const CourseDetailPage = () => {
   const { id } = useParams();
-  const { user } = useAuth();
-  const { courses, notes, liveClasses, addCourseReview, isEnrolled, getCourseProgress } = useData();
-  const { enrollInCourse } = useAuth();
+  const { user, updateUser } = useAuth();
+  const { courses, notes, liveClasses, addCourseReview, isEnrolled, getCourseProgress, refetchUserEnrollments, enrollCourse } = useData();
   const [activeTab, setActiveTab] = useState<Tab>('Overview');
   const [expandedModules, setExpandedModules] = useState<number[]>([0]);
   const [reviewText, setReviewText] = useState('');
   const [reviewRating, setReviewRating] = useState(5);
   const [hoverRating, setHoverRating] = useState(0);
+  const [isProcessingEnroll, setIsProcessingEnroll] = useState(false);
+
+  // Load user enrollments when page mounts
+  useEffect(() => {
+    if (user?.id) {
+      const userId = user.id || (user as any)._id?.toString();
+      if (userId) {
+        refetchUserEnrollments(userId);
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id, id]);
 
   // Find course
   const course = courses.find((c) => c.id === id);
-  const isUserEnrolled = user && isEnrolled(user.id, id || '');
-  const progress = user ? getCourseProgress(user.id, id || '') : 0;
+  const userId = user?.id || (user as any)?._id?.toString() || '';
+  const authEnrolledCourses = user?.enrolledCourses?.map((c: any) => c?.toString()) || [];
+  const isUserEnrolled = Boolean(
+    user && id && (isEnrolled(userId, id) || authEnrolledCourses.includes(id))
+  );
+  const progress = user && id ? getCourseProgress(userId, id) : 0;
   const courseNotes = notes.filter((n) => n.courseId === id);
   const courseLiveClasses = liveClasses.filter((lc) => lc.courseId === id);
 
   const handleEnroll = async () => {
     if (!user || !id) return;
+    const userId = user.id || (user as any)._id?.toString();
+    if (!userId) return;
+
+    setIsProcessingEnroll(true);
     try {
-      await enrollInCourse(id);
+      const enrolledUser = await enrollCourse(userId, id);
+      if (enrolledUser) {
+        updateUser(enrolledUser);
+      }
       toast.success('Enrolled Successfully 🎉');
+      await refetchUserEnrollments(userId);
     } catch (error) {
-      toast.error('Failed to enroll');
+      const message = error instanceof Error ? error.message : String(error);
+      if (message.includes('Already enrolled')) {
+        toast.success('Already enrolled. Redirecting to course...');
+      } else {
+        toast.error('Failed to enroll. Please try again.');
+        console.error('Course detail enrollment error:', error);
+      }
+    } finally {
+      setIsProcessingEnroll(false);
     }
   };
 
@@ -160,15 +192,19 @@ const CourseDetailPage = () => {
             </div>
 
             {/* Right: Pricing Card (desktop) */}
-            <div className="hidden md:block">
+            <div className="hidden md:flex flex-col gap-4">
               <PricingCard
                 course={course}
                 isEnrolled={isUserEnrolled}
                 discount={discount}
                 user={user}
                 onEnroll={handleEnroll}
+                isLoading={isProcessingEnroll}
                 progress={progress}
               />
+              {(course.recordedLectures || []).length > 0 && (
+                <RecordedLecturesCard lectures={course.recordedLectures || []} isEnrolled={isUserEnrolled} />
+              )}
             </div>
           </div>
         </div>
@@ -176,7 +212,7 @@ const CourseDetailPage = () => {
 
       {/* Mobile Pricing */}
       <div className="md:hidden border-b border-border bg-card px-4 py-4">
-        <PricingCard course={course} isEnrolled={isUserEnrolled} discount={discount} user={user} onEnroll={handleEnroll} progress={progress} />
+        <PricingCard course={course} isEnrolled={isUserEnrolled} discount={discount} user={user} onEnroll={handleEnroll} isLoading={isProcessingEnroll} progress={progress} />
       </div>
 
       {/* Tabs */}
@@ -335,18 +371,12 @@ const CourseDetailPage = () => {
               <p className="text-sm text-muted-foreground">
                 {course.modules} modules · {course.duration} total
               </p>
-              <button
-                onClick={() => setExpandedModules(expandedModules.length === course.modulesList.length ? [] : course.modulesList.map((_, i) => i))}
-                className="text-xs text-primary hover:underline"
-              >
-                {expandedModules.length === course.modulesList.length ? 'Collapse all' : 'Expand all'}
-              </button>
             </div>
 
             <div className="space-y-2">
-              {course.modulesList.map((mod, idx) => {
+              {course.modulesList.map((moduleName, idx) => {
                 const isOpen = expandedModules.includes(idx);
-                const moduleLectures = (course.recordedLectures || []).filter((l) => l.moduleIndex === idx);
+                const moduleLectures = (course.recordedLectures || []).filter((l) => l.moduleName === moduleName);
                 return (
                   <div key={idx} className="rounded-lg border border-border overflow-hidden">
                     <button
@@ -357,11 +387,11 @@ const CourseDetailPage = () => {
                         <span className="flex h-7 w-7 items-center justify-center rounded-full bg-primary/10 text-xs font-bold text-primary shrink-0">
                           {idx + 1}
                         </span>
-                        <span className="font-medium text-card-foreground text-sm text-left">{mod.title}</span>
+                        <span className="font-medium text-card-foreground text-sm text-left">{moduleName}</span>
                       </div>
                       <div className="flex items-center gap-3 shrink-0">
                         <span className="text-xs text-muted-foreground hidden sm:block">
-                          {mod.lessons} lessons · {mod.duration}
+                          {moduleLectures.length} lectures
                         </span>
                         {isOpen ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
                       </div>
@@ -369,27 +399,19 @@ const CourseDetailPage = () => {
 
                     {isOpen && (
                       <div className="bg-muted/20 divide-y divide-border">
-                        {/* Topics */}
-                        {(mod.topics || []).map((topic, ti) => (
-                          <div key={ti} className="flex items-center gap-3 px-4 py-2.5 text-sm">
-                            <FileText className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                            <span className="text-muted-foreground">{topic}</span>
-                          </div>
-                        ))}
-
                         {/* Recorded lectures */}
                         {moduleLectures.map((lec) => (
                           <div key={lec.id} className="flex items-center justify-between px-4 py-2.5 text-sm">
                             <div className="flex items-center gap-3">
-                              {lec.isPreview || isUserEnrolled ? (
+                              {lec.preview || isUserEnrolled ? (
                                 <Play className="h-3.5 w-3.5 text-primary shrink-0" />
                               ) : (
                                 <Lock className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
                               )}
-                              <span className={lec.isPreview || isUserEnrolled ? 'text-primary hover:underline cursor-pointer' : 'text-muted-foreground'}>
-                                {lec.title}
+                              <span className={lec.preview || isUserEnrolled ? 'text-primary hover:underline cursor-pointer' : 'text-muted-foreground'}>
+                                {lec.lectureTitle}
                               </span>
-                              {lec.isPreview && (
+                              {lec.preview && (
                                 <span className="text-xs bg-green-100 text-green-700 px-1.5 py-0.5 rounded-sm">Preview</span>
                               )}
                             </div>
@@ -397,10 +419,10 @@ const CourseDetailPage = () => {
                           </div>
                         ))}
 
-                        {/* If no content yet */}
-                        {(mod.topics || []).length === 0 && moduleLectures.length === 0 && (
+                        {/* If no lectures yet */}
+                        {moduleLectures.length === 0 && (
                           <div className="px-4 py-3 text-sm text-muted-foreground">
-                            Content coming soon...
+                            Lectures coming soon...
                           </div>
                         )}
                       </div>
@@ -414,6 +436,86 @@ const CourseDetailPage = () => {
               <div className="rounded-lg border border-border bg-card p-8 text-center">
                 <BookOpen className="mx-auto mb-2 h-8 w-8 text-muted-foreground" />
                 <p className="text-muted-foreground">Curriculum details are being updated.</p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {activeTab === 'Recorded Lectures' && (
+          <div className="space-y-6">
+            <p className="text-sm text-muted-foreground mb-4">
+              Access all course video lectures organized by modules. Watch at your own pace and review anytime.
+            </p>
+            {(course.recordedLectures || []).length === 0 ? (
+              <div className="rounded-lg border border-border bg-card p-8 text-center">
+                <Video className="mx-auto mb-3 h-8 w-8 text-muted-foreground" />
+                <p className="text-muted-foreground">No recorded lectures available for this course yet.</p>
+              </div>
+            ) : (
+              <div className="space-y-6">
+                {(() => {
+                  // Group lectures by moduleName
+                  const groupedLectures = (course.recordedLectures || []).reduce((acc, lecture) => {
+                    const module = lecture.moduleName || 'General';
+                    if (!acc[module]) acc[module] = [];
+                    acc[module].push(lecture);
+                    return acc;
+                  }, {} as Record<string, RecordedLecture[]>);
+
+                  return Object.entries(groupedLectures).map(([moduleName, lectures]) => (
+                    <div key={moduleName} className="space-y-3">
+                      <h3 className="font-heading text-lg font-semibold text-foreground border-b border-border pb-2">
+                        {moduleName}
+                      </h3>
+                      <div className="space-y-2">
+                        {lectures.map((lecture, idx) => (
+                          <div
+                            key={lecture.id || idx}
+                            className={`flex items-start gap-4 rounded-lg border p-4 transition-all ${
+                              isUserEnrolled || lecture.preview
+                                ? 'border-border bg-card hover:border-gold/50 hover:shadow-md cursor-pointer'
+                                : 'border-muted bg-muted/30 opacity-60'
+                            }`}
+                            onClick={() => {
+                              if (isUserEnrolled || lecture.preview) {
+                                if (lecture.videoUrl) {
+                                  window.open(lecture.videoUrl, '_blank');
+                                }
+                              }
+                            }}
+                          >
+                            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-primary/10">
+                              <Play className="h-5 w-5 text-primary" />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-start justify-between gap-2">
+                                <div className="flex-1">
+                                  <h4 className="font-medium text-card-foreground text-sm mb-1">
+                                    {lecture.lectureTitle}
+                                  </h4>
+                                  <p className="text-xs text-muted-foreground flex items-center gap-1.5">
+                                    <Clock className="h-3 w-3" />
+                                    {lecture.duration}
+                                  </p>
+                                </div>
+                                {lecture.preview && (
+                                  <span className="px-2.5 py-1 text-xs font-semibold text-gold bg-gold/10 rounded whitespace-nowrap">
+                                    Free Preview
+                                  </span>
+                                )}
+                                {!isUserEnrolled && !lecture.preview && (
+                                  <span className="px-2.5 py-1 text-xs font-semibold text-muted-foreground bg-muted rounded flex items-center gap-1 whitespace-nowrap">
+                                    <Lock className="h-3 w-3" /> Locked
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ));
+                })()}
               </div>
             )}
           </div>
@@ -607,6 +709,77 @@ const CourseDetailPage = () => {
   );
 };
 
+/* Reusable Recorded Lectures Card */
+const RecordedLecturesCard = ({
+  lectures,
+  isEnrolled,
+}: {
+  lectures: any[];
+  isEnrolled: boolean;
+}) => {
+  // Group lectures by moduleName
+  const groupedLectures: Record<string, any[]> = lectures.reduce((acc, lecture) => {
+    const module = lecture.moduleName || 'General';
+    if (!acc[module]) acc[module] = [];
+    acc[module].push(lecture);
+    return acc;
+  }, {} as Record<string, any[]>);
+
+  return (
+    <div className="rounded-xl border border-border bg-card shadow-lg overflow-hidden">
+      <div className="bg-gradient-to-r from-primary to-primary/80 px-5 py-4">
+        <h3 className="font-heading text-lg font-semibold text-primary-foreground flex items-center gap-2">
+          <Video className="h-5 w-5" />
+          Recorded Lectures
+        </h3>
+        <p className="text-xs text-primary-foreground/80 mt-1">{lectures.length} videos available</p>
+      </div>
+      <div className="p-4 max-h-[500px] overflow-y-auto space-y-4">
+        {Object.entries(groupedLectures).map(([moduleName, moduleLectures]) => (
+          <div key={moduleName} className="space-y-2">
+            <h4 className="font-medium text-sm text-foreground border-b border-border/50 pb-1">
+              {moduleName}
+            </h4>
+            <div className="space-y-2">
+              {moduleLectures.map((lecture, idx) => (
+                <div
+                  key={lecture.id || idx}
+                  className={`flex items-start gap-3 p-3 rounded-lg border ${
+                    isEnrolled || lecture.preview
+                      ? 'border-border bg-muted/50 hover:bg-muted cursor-pointer'
+                      : 'border-muted bg-muted/30 opacity-60'
+                  } transition-colors`}
+                >
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded bg-primary/20 text-primary text-xs font-bold">
+                    {idx + 1}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-card-foreground line-clamp-2">{lecture.lectureTitle}</p>
+                    <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
+                      <Clock className="h-3 w-3" />
+                      {lecture.duration}
+                    </p>
+                    {lecture.preview && (
+                      <span className="inline-block mt-2 px-2 py-0.5 text-xs font-semibold text-gold bg-gold/10 rounded">
+                        Preview
+                      </span>
+                    )}
+                    {!isEnrolled && !lecture.preview && (
+                      <span className="inline-block mt-2 px-2 py-0.5 text-xs font-semibold text-muted-foreground bg-muted rounded flex items-center gap-1">
+                        <Lock className="h-3 w-3" /> Locked
+                      </span>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
 /* Reusable Pricing Card */
 const PricingCard = ({
   course,
@@ -614,6 +787,7 @@ const PricingCard = ({
   discount,
   user,
   onEnroll,
+  isLoading,
   progress,
 }: {
   course: any;
@@ -621,6 +795,7 @@ const PricingCard = ({
   discount: number | null;
   user: any;
   onEnroll?: () => void;
+  isLoading?: boolean;
   progress?: number;
 }) => (
   <div className="rounded-xl border border-border bg-card shadow-xl overflow-hidden">
@@ -660,8 +835,18 @@ const PricingCard = ({
           </Button>
         </Link>
       ) : user ? (
-        <Button onClick={onEnroll} className="w-full bg-primary text-primary-foreground hover:bg-primary-hover mb-3 font-semibold">
-          Enroll Now
+        <Button
+          onClick={onEnroll}
+          disabled={isLoading}
+          className="w-full bg-primary text-primary-foreground hover:bg-primary-hover mb-3 font-semibold"
+        >
+          {isLoading ? (
+            <>
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Enrolling...
+            </>
+          ) : (
+            'Enroll Now'
+          )}
         </Button>
       ) : (
         <Link to="/login">

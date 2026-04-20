@@ -39,13 +39,17 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse<
   const result = await users.insertOne(newUser);
   const saved = await users.findOne({ _id: result.insertedId }, { projection: { password: 0 } });
 
-  const { password: _pwd, _id, ...savedRest } = saved as any;
+  const { password: _pwd, _id, enrolledCourses, completedCourses, ...savedRest } = saved as any;
   const userWithoutPassword = {
     id: _id?.toString(),
-    enrolledCourses: [],
-    completedCourses: [],
-    progress: {},
-    certificates: [],
+    enrolledCourses: Array.isArray(enrolledCourses)
+      ? enrolledCourses.map((c: any) => c?.toString ? c.toString() : c)
+      : [],
+    completedCourses: Array.isArray(completedCourses)
+      ? completedCourses.map((c: any) => c?.toString ? c.toString() : c)
+      : [],
+    progress: saved.progress || {},
+    certificates: saved.certificates || [],
     ...savedRest,
   };
 
