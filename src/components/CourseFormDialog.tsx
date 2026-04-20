@@ -60,22 +60,40 @@ export function CourseFormDialog({ initial, categories, onSave, onClose }: Cours
   });
 
   const [highlights, setHighlights] = useState<string[]>(initial?.highlights || ['']);
+  const [advantageSections, setAdvantageSections] = useState<CourseAdvantageSection[]>(() => {
+    if (!initial?.advantages) return [{ title: '', videos: [{ title: '', videoUrl: '' }] }];
+    return initial.advantages.map((adv) => {
+      if (typeof adv === 'string') {
+        return {
+          title: adv,
+          videos: (initial.requirements || []).map((req) => ({ title: req, videoUrl: '' })),
+        };
+      }
+      return {
+        title: adv.title || '',
+        videos: adv.videos?.length ? adv.videos : [{ title: '', videoUrl: '' }],
+      };
+    });
+  });
   const [targetAudience, setTargetAudience] = useState<string[]>(initial?.targetAudience || ['']);
   const [tags, setTags] = useState<string>(initial?.tags?.join(', ') || '');
 
-  const [modulesList, setModulesList] = useState<string[]>(
-    (initial?.modulesList || []).map((m: any) => typeof m === 'string' ? m : m.title || '').filter(Boolean)
+  const [modulesList, setModulesList] = useState(
+    initial?.modulesList?.length
+      ? initial.modulesList
+      : [{ title: '', lessons: 1, duration: '1 hr', topics: [] as string[] }]
   );
 
   const [lectures, setLectures] = useState<RecordedLecture[]>(
     (initial?.recordedLectures || []).map((lec: any) => ({
       id: lec.id || `rl-${Date.now()}`,
-      moduleName: lec.moduleName || (modulesList[lec.moduleIndex || 0] || ''),
+      moduleName: lec.moduleName || '',
       lectureTitle: lec.lectureTitle || lec.title || '',
       duration: lec.duration || '',
       videoUrl: lec.videoUrl || '',
       preview: lec.preview !== undefined ? lec.preview : lec.isPreview || false,
       thumbnail: lec.thumbnail || '',
+      description: lec.description || '',
     }))
   );
 
@@ -126,6 +144,34 @@ export function CourseFormDialog({ initial, categories, onSave, onClose }: Cours
     }
   };
 
+  const handleVideoUpload = async (file: File, sectionIndex: number, videoIndex: number) => {
+    setUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('type', 'video');
+      const response = await fetch('/api/upload', { method: 'POST', body: formData });
+      if (response.ok) {
+        const data = await response.json();
+        setAdvantageSections((prev) => {
+          const next = [...prev];
+          const section = next[sectionIndex];
+          if (section) {
+            section.videos = section.videos.map((video, idx) => idx === videoIndex ? { ...video, videoUrl: data.url } : video);
+          }
+          return next;
+        });
+        toast.success('Video uploaded!');
+      } else {
+        toast.error('Upload failed');
+      }
+    } catch {
+      toast.error('Upload failed');
+    } finally {
+      setUploading(false);
+    }
+  };
+
   const updateList = (
     list: string[],
     setList: (v: string[]) => void,
@@ -142,6 +188,52 @@ export function CourseFormDialog({ initial, categories, onSave, onClose }: Cours
 
   const removeListItem = (list: string[], setList: (v: string[]) => void, idx: number) =>
     setList(list.filter((_, i) => i !== idx));
+
+  const updateAdvantageSection = (idx: number, updates: Partial<CourseAdvantageSection>) => {
+    setAdvantageSections((prev) => {
+      const next = [...prev];
+      next[idx] = { ...next[idx], ...updates };
+      return next;
+    });
+  };
+
+  const addAdvantageSection = () => {
+    setAdvantageSections((prev) => [...prev, { title: '', videos: [{ title: '', videoUrl: '' }] }]);
+  };
+
+  const removeAdvantageSection = (idx: number) => {
+    setAdvantageSections((prev) => prev.filter((_, i) => i !== idx));
+  };
+
+  const addVideoToSection = (sectionIndex: number) => {
+    setAdvantageSections((prev) => {
+      const next = [...prev];
+      if (next[sectionIndex]) {
+        next[sectionIndex].videos = [...next[sectionIndex].videos, { title: '', videoUrl: '' }];
+      }
+      return next;
+    });
+  };
+
+  const updateVideoInSection = (sectionIndex: number, videoIndex: number, updates: Partial<CourseVideo>) => {
+    setAdvantageSections((prev) => {
+      const next = [...prev];
+      if (next[sectionIndex]) {
+        next[sectionIndex].videos = next[sectionIndex].videos.map((video, idx) => idx === videoIndex ? { ...video, ...updates } : video);
+      }
+      return next;
+    });
+  };
+
+  const removeVideoFromSection = (sectionIndex: number, videoIndex: number) => {
+    setAdvantageSections((prev) => {
+      const next = [...prev];
+      if (next[sectionIndex]) {
+        next[sectionIndex].videos = next[sectionIndex].videos.filter((_, idx) => idx !== videoIndex);
+      }
+      return next;
+    });
+  };
 
   const addAssignment = () => {
     setAssignments([...assignments, { id: `temp-${Date.now()}-${Math.random()}`, title: '', fileUrl: '', courseId: initial?.id || '', createdAt: new Date().toISOString() }]);
@@ -170,9 +262,15 @@ export function CourseFormDialog({ initial, categories, onSave, onClose }: Cours
       price: Math.max(0, parseFloat(form.price) || 0),
       originalPrice: form.originalPrice ? Math.max(0, parseFloat(form.originalPrice)) : undefined,
       highlights: highlights.filter(Boolean),
+      advantages: advantageSections
+        .filter(section => section.title.trim())
+        .map(section => ({
+          title: section.title,
+          videos: section.videos.filter(video => video.title.trim()),
+        })),
       targetAudience: targetAudience.filter(Boolean),
       tags: tags.split(',').map(t => t.trim()).filter(Boolean),
-      modulesList: modulesList,
+      modulesList: modulesList.filter(m => m.title),
       recordedLectures: lectures,
       assignments: assignments.filter(a => a.title && a.fileUrl && a.courseId).map(a => ({
         id: a.id.startsWith('temp-') ? undefined : a.id,
@@ -319,14 +417,9 @@ export function CourseFormDialog({ initial, categories, onSave, onClose }: Cours
                 </Button>
               </div>
             </div>
-            <div>
-              <label className="text-xs font-medium text-muted-foreground mb-1 block">Tags (comma-separated)</label>
-              <Input value={tags} onChange={e => setTags(e.target.value)} placeholder="leadership, management, strategy" />
-            </div>
           </>
         )}
 
-        {/* ── CURRICULUM ── */}
         {tab === 'curriculum' && (
           <>
             <div>
@@ -340,7 +433,7 @@ export function CourseFormDialog({ initial, categories, onSave, onClose }: Cours
                 <label className="text-xs font-medium text-muted-foreground">Recorded Lectures</label>
                 <Button
                   variant="outline" size="sm" className="text-xs gap-1"
-                  onClick={() => setLectures([...lectures, { id: `rl-${Date.now()}`, moduleName: '', lectureTitle: '', duration: '', videoUrl: '', preview: false }])}
+                  onClick={() => setLectures([...lectures, { id: `rl-${Date.now()}`, moduleName: '', lectureTitle: '', duration: '', videoUrl: '', preview: false, description: '' }])}
                 >
                   <Plus className="h-3 w-3" /> Add Lecture
                 </Button>
@@ -359,31 +452,13 @@ export function CourseFormDialog({ initial, categories, onSave, onClose }: Cours
                         <Trash2 className="h-4 w-4" />
                       </button>
                     </div>
-                    <div className="grid grid-cols-2 gap-2">
-                      <div className="relative">
-                        <select
-                          value={lec.moduleName}
-                          onChange={e => {
-                            const value = e.target.value;
-                            if (value === '__create_new__') {
-                              const newModule = prompt('Enter new module name:');
-                              if (newModule && newModule.trim()) {
-                                setModulesList([...modulesList, newModule.trim()]);
-                                const n = [...lectures]; n[li] = { ...n[li], moduleName: newModule.trim() }; setLectures(n);
-                              }
-                            } else {
-                              const n = [...lectures]; n[li] = { ...n[li], moduleName: value }; setLectures(n);
-                            }
-                          }}
-                          className="h-8 text-xs rounded-md border border-input bg-background px-2 w-full"
-                        >
-                          <option value="">Select Module</option>
-                          {modulesList.map((module, mi) => (
-                            <option key={mi} value={module}>{module}</option>
-                          ))}
-                          <option value="__create_new__">+ Create New Module</option>
-                        </select>
-                      </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                      <Input
+                        value={lec.moduleName}
+                        onChange={e => { const n = [...lectures]; n[li] = { ...n[li], moduleName: e.target.value }; setLectures(n); }}
+                        placeholder="Topic Name / Module"
+                        className="h-8 text-xs"
+                      />
                       <Input
                         value={lec.duration}
                         onChange={e => { const n = [...lectures]; n[li] = { ...n[li], duration: e.target.value }; setLectures(n); }}
@@ -391,6 +466,13 @@ export function CourseFormDialog({ initial, categories, onSave, onClose }: Cours
                         className="h-8 text-xs"
                       />
                     </div>
+                    <Textarea
+                      value={lec.description}
+                      onChange={e => { const n = [...lectures]; n[li] = { ...n[li], description: e.target.value }; setLectures(n); }}
+                      rows={2}
+                      placeholder="Lecture description"
+                      className="text-xs"
+                    />
                     <div className="flex gap-2 items-center">
                       <Input
                         value={lec.videoUrl}

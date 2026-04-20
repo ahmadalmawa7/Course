@@ -56,7 +56,7 @@ interface DataContextType {
   addCategory: (category: string) => void;
   updateCategory: (oldCategory: string, newCategory: string) => void;
   deleteCategory: (category: string) => void;
-  enrollCourse: (userId: string, courseId: string) => Promise<any>;
+  enrollCourse: (userId: string, courseId: string) => Promise<void>;
   refetchUserEnrollments: (userId: string) => Promise<void>;
   updateProgress: (userId: string, courseId: string, lectureId: string, completed: boolean, watchTime?: number) => Promise<void>;
   getCourseProgress: (userId: string, courseId: string) => number;
@@ -91,20 +91,12 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
             setCourses(data.map((item: any) => ({
               ...item,
               id: item._id ? item._id.toString() : item.id,
-              modulesList: (item.modulesList || []).map((m: any) => typeof m === 'string' ? m : m.title || '').filter(Boolean),
+              modulesList: item.modulesList || [],
               highlights: item.highlights || [],
               advantages: item.advantages || [],
               requirements: item.requirements || [],
               targetAudience: item.targetAudience || [],
-              recordedLectures: (item.recordedLectures || []).map((lec: any) => ({
-                id: lec.id || `rl-${Date.now()}`,
-                moduleName: lec.moduleName || '',
-                lectureTitle: lec.lectureTitle || lec.title || '',
-                duration: lec.duration || '',
-                videoUrl: lec.videoUrl || '',
-                preview: lec.preview !== undefined ? lec.preview : lec.isPreview || false,
-                thumbnail: lec.thumbnail || '',
-              })),
+              recordedLectures: item.recordedLectures || [],
               reviews: item.reviews || [],
               tags: item.tags || [],
             })));

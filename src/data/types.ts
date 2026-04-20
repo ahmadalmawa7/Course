@@ -22,6 +22,7 @@ export interface RecordedLecture {
   videoUrl: string;
   preview: boolean;
   thumbnail?: string;
+  description?: string;
 }
 
 export interface CourseVideo {
@@ -51,7 +52,7 @@ export interface Course {
   enrolled: number;
   rating: number;
   totalRatings?: number;
-  modulesList: string[];
+  modulesList: CourseModule[];
   // Rich fields
   highlights?: string[];          // "What you'll learn" bullet points
   whyTake?: string;               // Why this course paragraph

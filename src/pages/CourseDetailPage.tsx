@@ -202,9 +202,6 @@ const CourseDetailPage = () => {
                 isLoading={isProcessingEnroll}
                 progress={progress}
               />
-              {(course.recordedLectures || []).length > 0 && (
-                <RecordedLecturesCard lectures={course.recordedLectures || []} isEnrolled={isUserEnrolled} />
-              )}
             </div>
           </div>
         </div>
@@ -493,6 +490,11 @@ const CourseDetailPage = () => {
                                   <h4 className="font-medium text-card-foreground text-sm mb-1">
                                     {lecture.lectureTitle}
                                   </h4>
+                                  {lecture.description && (
+                                    <p className="text-sm text-muted-foreground leading-relaxed mb-1">
+                                      {lecture.description}
+                                    </p>
+                                  )}
                                   <p className="text-xs text-muted-foreground flex items-center gap-1.5">
                                     <Clock className="h-3 w-3" />
                                     {lecture.duration}
@@ -704,77 +706,6 @@ const CourseDetailPage = () => {
             )}
           </div>
         )}
-      </div>
-    </div>
-  );
-};
-
-/* Reusable Recorded Lectures Card */
-const RecordedLecturesCard = ({
-  lectures,
-  isEnrolled,
-}: {
-  lectures: any[];
-  isEnrolled: boolean;
-}) => {
-  // Group lectures by moduleName
-  const groupedLectures: Record<string, any[]> = lectures.reduce((acc, lecture) => {
-    const module = lecture.moduleName || 'General';
-    if (!acc[module]) acc[module] = [];
-    acc[module].push(lecture);
-    return acc;
-  }, {} as Record<string, any[]>);
-
-  return (
-    <div className="rounded-xl border border-border bg-card shadow-lg overflow-hidden">
-      <div className="bg-gradient-to-r from-primary to-primary/80 px-5 py-4">
-        <h3 className="font-heading text-lg font-semibold text-primary-foreground flex items-center gap-2">
-          <Video className="h-5 w-5" />
-          Recorded Lectures
-        </h3>
-        <p className="text-xs text-primary-foreground/80 mt-1">{lectures.length} videos available</p>
-      </div>
-      <div className="p-4 max-h-[500px] overflow-y-auto space-y-4">
-        {Object.entries(groupedLectures).map(([moduleName, moduleLectures]) => (
-          <div key={moduleName} className="space-y-2">
-            <h4 className="font-medium text-sm text-foreground border-b border-border/50 pb-1">
-              {moduleName}
-            </h4>
-            <div className="space-y-2">
-              {moduleLectures.map((lecture, idx) => (
-                <div
-                  key={lecture.id || idx}
-                  className={`flex items-start gap-3 p-3 rounded-lg border ${
-                    isEnrolled || lecture.preview
-                      ? 'border-border bg-muted/50 hover:bg-muted cursor-pointer'
-                      : 'border-muted bg-muted/30 opacity-60'
-                  } transition-colors`}
-                >
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded bg-primary/20 text-primary text-xs font-bold">
-                    {idx + 1}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-card-foreground line-clamp-2">{lecture.lectureTitle}</p>
-                    <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
-                      <Clock className="h-3 w-3" />
-                      {lecture.duration}
-                    </p>
-                    {lecture.preview && (
-                      <span className="inline-block mt-2 px-2 py-0.5 text-xs font-semibold text-gold bg-gold/10 rounded">
-                        Preview
-                      </span>
-                    )}
-                    {!isEnrolled && !lecture.preview && (
-                      <span className="inline-block mt-2 px-2 py-0.5 text-xs font-semibold text-muted-foreground bg-muted rounded flex items-center gap-1">
-                        <Lock className="h-3 w-3" /> Locked
-                      </span>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        ))}
       </div>
     </div>
   );
