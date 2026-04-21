@@ -6,23 +6,9 @@ import {
 
   Course, LiveClass, Article, Payment, Note, Testimonial,
 
-  Enquiry, ArticleRequest, SupportTicket, CourseReview,
-
-  Enrollment, LectureProgress, ArticleComment
+  Enquiry, ArticleRequest, SupportTicket, CourseReview, Enrollment, LectureProgress, ArticleComment
 
 } from '@/data/types';
-
-import {
-
-  courses as initialCourses, liveClasses as initialClasses, articles as initialArticles,
-
-  payments as initialPayments, notes as initialNotes, testimonials as initialTestimonials,
-
-  enquiries as initialEnquiries, articleRequests as initialArticleRequests,
-
-  supportTickets as initialSupportTickets, courseCategories as initialCategories
-
-} from '@/data/mockData';
 
 
 
@@ -139,25 +125,25 @@ const DataContext = createContext<DataContextType | undefined>(undefined);
 
 export const DataProvider = ({ children }: { children: ReactNode }) => {
 
-  const [courses, setCourses] = useState<Course[]>(initialCourses);
+  const [courses, setCourses] = useState<Course[]>([]);
 
-  const [liveClasses, setLiveClasses] = useState<LiveClass[]>(initialClasses);
+  const [liveClasses, setLiveClasses] = useState<LiveClass[]>([]);
 
-  const [articles, setArticles] = useState<Article[]>(initialArticles);
+  const [articles, setArticles] = useState<Article[]>([]);
 
-  const [payments, setPayments] = useState<Payment[]>(initialPayments);
+  const [payments, setPayments] = useState<Payment[]>([]);
 
-  const [notes, setNotes] = useState<Note[]>(initialNotes);
+  const [notes, setNotes] = useState<Note[]>([]);
 
-  const [testimonials, setTestimonials] = useState<Testimonial[]>(initialTestimonials);
+  const [testimonials, setTestimonials] = useState<Testimonial[]>([]);
 
-  const [enquiries, setEnquiries] = useState<Enquiry[]>(initialEnquiries);
+  const [enquiries, setEnquiries] = useState<Enquiry[]>([]);
 
-  const [articleRequests, setArticleRequests] = useState<ArticleRequest[]>(initialArticleRequests);
+  const [articleRequests, setArticleRequests] = useState<ArticleRequest[]>([]);
 
-  const [supportTickets, setSupportTickets] = useState<SupportTicket[]>(initialSupportTickets);
+  const [supportTickets, setSupportTickets] = useState<SupportTicket[]>([]);
 
-  const [categories, setCategories] = useState<string[]>(initialCategories);
+  const [categories, setCategories] = useState<string[]>(['All']);
 
   const [enrollments, setEnrollments] = useState<Enrollment[]>([]);
 
@@ -557,6 +543,16 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
 
   const deleteCourse = async (id: string) => {
 
+    // Handle mock data courses (string IDs like 'c1', 'c2') - delete locally only
+
+    if (id.startsWith('c')) {
+
+      setCourses(p => p.filter(c => c.id !== id));
+
+      return;
+
+    }
+
     try {
 
       const response = await fetch('/api/courses', {
@@ -569,7 +565,13 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
 
       });
 
-      if (!response.ok) throw new Error('Failed to delete course');
+      if (!response.ok) {
+
+        const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+
+        throw new Error(errorData.error || 'Failed to delete course');
+
+      }
 
       setCourses(p => p.filter(c => c.id !== id));
 
