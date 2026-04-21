@@ -47,7 +47,7 @@ const AdminPage = () => {
     courses, liveClasses, articles, payments, notes, testimonials, enquiries, supportTickets, categories,
     addCourse, updateCourse, deleteCourse, refetchCourses, addLiveClass, updateLiveClass, deleteLiveClass,
     addArticle, updateArticle, deleteArticle, deleteComment, replyToComment,
-    addNote, updateNote, deleteNote, approveTestimonial, deleteTestimonial, updateEnquiryStatus,
+    addNote, updateNote, deleteNote, approveTestimonial, deleteTestimonial, updateEnquiryStatus, deleteEnquiry,
     addSupportMessage, closeSupportTicket,
     addCategory, updateCategory, deleteCategory,
   } = useData();
@@ -79,6 +79,7 @@ const AdminPage = () => {
   const [pendingArticles, setPendingArticles] = useState<any[]>([]);
   const [loadingPendingArticles, setLoadingPendingArticles] = useState(false);
   const [loadingApprovedArticles, setLoadingApprovedArticles] = useState(false);
+  const [viewArticleImage, setViewArticleImage] = useState<{ url: string; title: string } | null>(null);
 
   useEffect(() => {
     const fetchPendingArticles = async () => {
@@ -311,7 +312,7 @@ const AdminPage = () => {
       date: new Date().toISOString().split('T')[0],
       category: formData.category || 'Leadership',
       readTime: `${Math.max(1, Math.ceil((formData.content?.length || 0) / 1000))} min read`,
-      image: '',
+      image: formData.image || '',
       likes: [],
     };
 
@@ -619,20 +620,20 @@ const AdminPage = () => {
   const handleRejectArticle = async (articleId: string) => {
     try {
       const response = await fetch('/api/articles', {
-        method: 'PATCH',
+        method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: articleId, status: 'rejected' }),
+        body: JSON.stringify({ id: articleId }),
       });
 
       if (response.ok) {
         setPendingArticles(prev => prev.filter(a => a.id !== articleId));
-        toast.success('Article rejected!');
+        toast.success('Article rejected and deleted!');
       } else {
-        toast.error('Failed to reject article');
+        toast.error('Failed to delete article');
       }
     } catch (error) {
-      console.error('Error rejecting article:', error);
-      toast.error('Error rejecting article');
+      console.error('Error deleting article:', error);
+      toast.error('Error deleting article');
     }
   };
 
@@ -719,7 +720,11 @@ const handleSaveCategory = async (formData: Record<string, string>) => {
             {tabs.map(({ id, label, icon: Icon }) => (
               <button key={id} onClick={() => setActiveTab(id)}
                 className={`flex w-full items-center gap-2 rounded-md px-3 py-2 text-xs transition-colors ${activeTab === id ? 'bg-primary/10 text-primary font-medium' : 'text-muted-foreground hover:bg-muted'}`}>
-                <Icon className="h-3.5 w-3.5" /> {label}
+                <Icon className="h-3.5 w-3.5" />
+                <span className="flex-1 text-left">{label}</span>
+                {id === 'article-requests' && pendingArticles.length > 0 && (
+                  <span className="flex h-2 w-2 rounded-full bg-green-500" />
+                )}
               </button>
             ))}
           </nav>
@@ -730,7 +735,11 @@ const handleSaveCategory = async (formData: Record<string, string>) => {
             {tabs.map(({ id, label, icon: Icon }) => (
               <button key={id} onClick={() => setActiveTab(id)}
                 className={`flex shrink-0 items-center gap-1 rounded-md px-2 py-1.5 text-xs ${activeTab === id ? 'bg-primary/10 text-primary font-medium' : 'text-muted-foreground'}`}>
-                <Icon className="h-3 w-3" /> {label}
+                <Icon className="h-3 w-3" />
+                <span>{label}</span>
+                {id === 'article-requests' && pendingArticles.length > 0 && (
+                  <span className="flex h-2 w-2 rounded-full bg-green-500" />
+                )}
               </button>
             ))}
           </div>
@@ -1235,13 +1244,23 @@ const handleSaveCategory = async (formData: Record<string, string>) => {
                             <p className="text-sm text-muted-foreground">{e.message}</p>
                           </div>
                         </div>
-                        <div className="flex flex-col gap-1 ml-4">
+                        <div className="flex flex-col gap-2 ml-4">
                           {e.status === 'new' && (
-                            <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => { updateEnquiryStatus(e.id, 'contacted'); toast.success('Marked as contacted.'); }}>Mark Contacted</Button>
+                            <Button variant="default" size="sm" className="h-8 text-xs" onClick={() => { updateEnquiryStatus(e.id, 'contacted'); toast.success('Marked as contacted.'); }}>Mark Contacted</Button>
                           )}
                           {e.status === 'contacted' && (
-                            <Button variant="ghost" size="sm" className="h-7 text-xs text-green-600" onClick={() => { updateEnquiryStatus(e.id, 'resolved'); toast.success('Marked as resolved.'); }}>Resolve</Button>
+                            <Button variant="default" size="sm" className="h-8 text-xs bg-green-600 hover:bg-green-700" onClick={() => { updateEnquiryStatus(e.id, 'resolved'); toast.success('Marked as resolved.'); }}>Resolve</Button>
                           )}
+                          <Button variant="outline" size="sm" className="h-8 text-xs text-destructive border-destructive hover:bg-destructive hover:text-white" onClick={async () => {
+                            if (confirm('Are you sure you want to delete this enquiry?')) {
+                              try {
+                                await deleteEnquiry(e.id);
+                                toast.success('Enquiry deleted.');
+                              } catch {
+                                toast.error('Failed to delete enquiry.');
+                              }
+                            }
+                          }}>Delete</Button>
                         </div>
                       </div>
                     </div>
@@ -1267,11 +1286,21 @@ const handleSaveCategory = async (formData: Record<string, string>) => {
                     {pendingArticles.map(article => (
                       <div key={article.id} className="rounded-lg border border-border bg-card p-4">
                         <div className="flex items-start justify-between">
-                          <div>
+                          <div className="flex-1">
                             <p className="font-medium text-card-foreground">{article.title}</p>
                             <p className="text-xs text-muted-foreground">By {article.author} • {article.date}</p>
                             <p className="text-sm text-muted-foreground mt-1">{article.excerpt}</p>
-                            <p className="text-xs text-muted-foreground mt-2">Category: {article.category}</p>
+                            <div className="flex items-center gap-2 mt-2">
+                              <p className="text-xs text-muted-foreground">Category: {article.category}</p>
+                              {article.image && (
+                                <button
+                                  onClick={() => setViewArticleImage({ url: article.image, title: article.title })}
+                                  className="text-xs text-primary hover:text-primary/80 hover:underline"
+                                >
+                                  View Image
+                                </button>
+                              )}
+                            </div>
                           </div>
                           <div className="flex gap-1 ml-2">
                             <Button variant="ghost" size="sm" className="h-7 text-xs text-green-600" onClick={() => handleApproveArticle(article.id)}><CheckCircle className="h-3 w-3 mr-1" /> Approve</Button>
@@ -1399,6 +1428,16 @@ const handleSaveCategory = async (formData: Record<string, string>) => {
       )}
       {classDialog.open && <ClassFormDialog initial={classDialog.editing} courses={courses} onSave={handleSaveClass} onClose={() => setClassDialog({ open: false, editing: null })} />}
       {articleDialog.open && <ArticleFormDialog initial={articleDialog.editing} categories={categories} onSave={handleSaveArticle} onClose={() => setArticleDialog({ open: false, editing: null })} />}
+      {viewArticleImage && (
+        <DialogOverlay onClose={() => setViewArticleImage(null)}>
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="font-heading text-lg font-semibold text-card-foreground">Article Image</h3>
+            <button onClick={() => setViewArticleImage(null)}><X className="h-4 w-4 text-muted-foreground" /></button>
+          </div>
+          <p className="text-sm text-muted-foreground mb-3">{viewArticleImage.title}</p>
+          <img src={viewArticleImage.url} alt={viewArticleImage.title} className="w-full max-h-[60vh] object-contain rounded-lg" />
+        </DialogOverlay>
+      )}
       {recordedLectureDialog.open && <RecordedLectureFormDialog initial={recordedLectureDialog.editing} courses={courses} onSave={handleSaveRecordedLecture} onClose={() => setRecordedLectureDialog({ open: false, editing: null })} />}
       {categoryDialog.open && (
         <DialogOverlay onClose={() => { setCategoryDialog({ open: false, editing: null }); setCategoryForm({ name: '' }); }}>
@@ -1635,7 +1674,10 @@ function ArticleFormDialog({ initial, categories, onSave, onClose }: { initial: 
   const [form, setForm] = useState({
     title: initial?.title || '', category: initial?.category || '', excerpt: initial?.excerpt || '',
     content: initial?.content || '', author: initial?.author || 'Lt Col Shreesh Kumar (Retd)',
+    image: initial?.image || '',
   });
+  const [uploading, setUploading] = useState(false);
+  const [imageName, setImageName] = useState(initial?.image ? 'Image uploaded' : 'No file chosen');
 
   useEffect(() => {
     if (!initial) {
@@ -1667,6 +1709,51 @@ function ArticleFormDialog({ initial, categories, onSave, onClose }: { initial: 
         <div><label className="text-xs font-medium text-muted-foreground mb-1 block">Excerpt</label><Textarea value={form.excerpt} onChange={e => setForm({ ...form, excerpt: e.target.value })} rows={2} /></div>
         <div><label className="text-xs font-medium text-muted-foreground mb-1 block">Content *</label><Textarea value={form.content} onChange={e => setForm({ ...form, content: e.target.value })} rows={6} /></div>
         <div><label className="text-xs font-medium text-muted-foreground mb-1 block">Author</label><Input value={form.author} onChange={e => setForm({ ...form, author: e.target.value })} /></div>
+        <div>
+          <label className="text-xs font-medium text-muted-foreground mb-1 block">Article Image</label>
+          <div className="space-y-2">
+            <div className="flex items-center gap-3">
+              <label className="rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground cursor-pointer hover:bg-primary/90">
+                Choose Image
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={async (e) => {
+                    const file = e.target.files?.[0];
+                    if (file) {
+                      setImageName(file.name);
+                      setUploading(true);
+                      try {
+                        const formData = new FormData();
+                        formData.append('file', file);
+                        formData.append('type', 'article');
+                        const response = await fetch('/api/upload', { method: 'POST', body: formData });
+                        if (response.ok) {
+                          const data = await response.json();
+                          setForm({ ...form, image: data.url });
+                          toast.success('Image uploaded!');
+                        } else {
+                          toast.error('Upload failed');
+                        }
+                      } catch {
+                        toast.error('Upload failed');
+                      } finally {
+                        setUploading(false);
+                      }
+                    }
+                  }}
+                  disabled={uploading}
+                  className="sr-only"
+                />
+              </label>
+              <span className="text-xs text-muted-foreground truncate max-w-[200px]">{imageName}</span>
+            </div>
+            {uploading && <p className="text-xs text-muted-foreground">Uploading...</p>}
+            {form.image && (
+              <img src={form.image} alt="Preview" className="h-24 w-40 object-cover rounded-md border border-border" />
+            )}
+          </div>
+        </div>
       </div>
       <div className="mt-4 flex gap-2 justify-end">
         <Button variant="outline" size="sm" onClick={onClose}>Cancel</Button>

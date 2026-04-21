@@ -3,7 +3,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useData } from '@/contexts/DataContext';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
-import { BookOpen } from 'lucide-react';
+import { BookOpen, Upload } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -22,6 +22,7 @@ export const ArticleSubmissionDialog = ({ onSubmitSuccess }: ArticleSubmissionDi
   const { refetchArticles, categories } = useData();
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const [formData, setFormData] = useState({
     title: '',
     excerpt: '',
@@ -44,17 +45,21 @@ export const ArticleSubmissionDialog = ({ onSubmitSuccess }: ArticleSubmissionDi
     e.preventDefault();
     setLoading(true);
 
+    const payload = {
+      ...formData,
+      author: user?.name || 'Anonymous',
+      date: new Date().toISOString().split('T')[0],
+      status: 'pending',
+      submittedBy: user?.email || 'unknown',
+    };
+
+    console.log('Submitting article:', payload);
+
     try {
       const response = await fetch('/api/articles', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...formData,
-          author: user.name,
-          date: new Date().toISOString().split('T')[0],
-          status: 'pending',
-          submittedBy: user.email,
-        }),
+        body: JSON.stringify(payload),
       });
 
       if (response.ok) {
@@ -73,7 +78,9 @@ export const ArticleSubmissionDialog = ({ onSubmitSuccess }: ArticleSubmissionDi
         if (refetchArticles) await refetchArticles();
         if (onSubmitSuccess) onSubmitSuccess();
       } else {
-        toast.error('Failed to submit article');
+        const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+        console.error('Article submit error:', errorData);
+        toast.error(errorData.error || 'Failed to submit article');
       }
     } catch (error) {
       toast.error('Error submitting article');
@@ -162,14 +169,57 @@ export const ArticleSubmissionDialog = ({ onSubmitSuccess }: ArticleSubmissionDi
           </div>
 
           <div>
-            <label className="text-sm font-medium text-foreground">Image URL</label>
-            <input
-              type="url"
-              value={formData.image}
-              onChange={(e) => setFormData({ ...formData, image: e.target.value })}
-              placeholder="https://..."
-              className="w-full rounded-lg border border-border bg-card p-2 text-sm text-card-foreground focus:outline-none focus:ring-1 focus:ring-primary mt-1"
-            />
+            <label className="text-sm font-medium text-foreground">Article Image</label>
+            <div className="mt-1 space-y-2">
+              <div className="flex items-center gap-3">
+                <label className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground cursor-pointer hover:bg-primary/90 transition-colors">
+                  <Upload className="h-4 w-4" />
+                  Choose Image
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={async (e) => {
+                      const file = e.target.files?.[0];
+                      if (file) {
+                        setUploading(true);
+                        try {
+                          const uploadData = new FormData();
+                          uploadData.append('file', file);
+                          uploadData.append('type', 'article');
+                          const response = await fetch('/api/upload', { method: 'POST', body: uploadData });
+                          if (response.ok) {
+                            const data = await response.json();
+                            setFormData(prev => ({ ...prev, image: data.url }));
+                            toast.success('Image uploaded successfully!');
+                          } else {
+                            toast.error('Failed to upload image');
+                          }
+                        } catch {
+                          toast.error('Upload failed');
+                        } finally {
+                          setUploading(false);
+                        }
+                      }
+                    }}
+                    disabled={uploading}
+                    className="sr-only"
+                  />
+                </label>
+                {uploading && <span className="text-sm text-muted-foreground">Uploading...</span>}
+              </div>
+              {formData.image && (
+                <div className="relative">
+                  <img src={formData.image} alt="Article preview" className="h-32 w-48 object-cover rounded-lg border border-border" />
+                  <button
+                    type="button"
+                    onClick={() => setFormData({ ...formData, image: '' })}
+                    className="absolute -top-2 -right-2 h-6 w-6 rounded-full bg-destructive text-white text-xs hover:bg-destructive/90"
+                  >
+                    ×
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
 
           <div className="flex gap-2 justify-end pt-4">
