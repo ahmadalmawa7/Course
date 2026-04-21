@@ -2,21 +2,23 @@ import { useEffect, useState } from 'react';
 import { Navigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { useData } from '@/contexts/DataContext';
-import { Course, LiveClass, Article, Note } from '@/data/types';
-import { BookOpen, Users, CreditCard, Calendar, FileText, Award, BarChart3, Settings, Plus, Pencil, Trash2, Eye, MessageCircle, Reply, X, Save, HelpCircle, Star, Mail, CheckCircle, XCircle, Send, Upload, Loader, ExternalLink } from 'lucide-react';
+import { Course, LiveClass, Article, Note, RecordedLecture } from '@/data/types';
+import { BookOpen, Users, CreditCard, Calendar, FileText, Award, BarChart3, Settings, Plus, Pencil, Trash2, Eye, MessageCircle, Reply, X, Save, HelpCircle, Star, Mail, CheckCircle, XCircle, Send, Upload, Loader, ExternalLink, Video } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { toast } from 'sonner';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, PieChart, Pie, Cell } from 'recharts';
 import { CourseFormDialog } from "@/components/CourseFormDialog";
+import { RecordedLectureFormDialog } from "@/components/RecordedLectureFormDialog";
 
-type Tab = 'overview' | 'courses' | 'classes' | 'students' | 'payments' | 'articles' | 'comments' | 'certificates' | 'notes' | 'testimonials' | 'enquiries' | 'article-requests' | 'support' | 'settings' | 'categories';
+type Tab = 'overview' | 'courses' | 'classes' | 'students' | 'payments' | 'articles' | 'comments' | 'certificates' | 'notes' | 'testimonials' | 'enquiries' | 'article-requests' | 'support' | 'settings' | 'categories' | 'recorded-lectures';
 
 const tabs: { id: Tab; label: string; icon: React.ElementType }[] = [
   { id: 'overview', label: 'Overview', icon: BarChart3 },
   { id: 'categories', label: 'Categories', icon: BookOpen },
   { id: 'courses', label: 'Courses', icon: BookOpen },
+  { id: 'recorded-lectures', label: 'Recorded Lectures', icon: Video },
   { id: 'classes', label: 'Live Classes', icon: Calendar },
   { id: 'students', label: 'Students', icon: Users },
   { id: 'payments', label: 'Payments', icon: CreditCard },
@@ -43,7 +45,7 @@ const AdminPage = () => {
   const { user, isAdmin } = useAuth();
   const {
     courses, liveClasses, articles, payments, notes, testimonials, enquiries, supportTickets, categories,
-    addCourse, updateCourse, deleteCourse, addLiveClass, updateLiveClass, deleteLiveClass,
+    addCourse, updateCourse, deleteCourse, refetchCourses, addLiveClass, updateLiveClass, deleteLiveClass,
     addArticle, updateArticle, deleteArticle, deleteComment, replyToComment,
     addNote, updateNote, deleteNote, approveTestimonial, deleteTestimonial, updateEnquiryStatus,
     addSupportMessage, closeSupportTicket,
@@ -56,6 +58,7 @@ const AdminPage = () => {
   const [courseDialog, setCourseDialog] = useState<{ open: boolean; editing: Course | null }>({ open: false, editing: null });
   const [classDialog, setClassDialog] = useState<{ open: boolean; editing: LiveClass | null }>({ open: false, editing: null });
   const [articleDialog, setArticleDialog] = useState<{ open: boolean; editing: Article | null }>({ open: false, editing: null });
+  const [recordedLectureDialog, setRecordedLectureDialog] = useState<{ open: boolean; editing: RecordedLecture | null }>({ open: false, editing: null });
   const [viewCourse, setViewCourse] = useState<Course | null>(null);
   const [categoryDialog, setCategoryDialog] = useState<{ open: boolean; editing: string | null }>({ open: false, editing: null });
   const [categoryForm, setCategoryForm] = useState({ name: '' });
@@ -364,6 +367,109 @@ const AdminPage = () => {
     }
 
     setArticleDialog({ open: false, editing: null });
+  };
+
+  const handleSaveRecordedLecture = async (lectureData: RecordedLecture, courseId: string) => {
+    try {
+      const selectedCourse = courses.find(c => c.id === courseId);
+
+      if (!selectedCourse) {
+        toast.error('Course not found');
+        return;
+      }
+
+      if (recordedLectureDialog.editing) {
+        // Update existing lecture
+        console.log('Updating lecture:', { courseId, lectureId: recordedLectureDialog.editing.id, lecture: lectureData });
+
+        const response = await fetch('/api/recorded-lectures', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            courseId: selectedCourse.id,
+            lectureId: recordedLectureDialog.editing.id,
+            lecture: lectureData,
+          }),
+        });
+
+        const responseData = await response.json();
+        console.log('Update response:', { status: response.status, data: responseData });
+
+        if (response.ok) {
+          // Refetch all courses to get fresh data
+          await refetchCourses();
+          toast.success('Recorded lecture updated!');
+        } else {
+          toast.error(responseData.error || 'Failed to update lecture');
+        }
+      } else {
+        // Add new lecture
+        console.log('Adding new lecture:', { courseId: selectedCourse.id, lecture: lectureData });
+
+        const response = await fetch('/api/recorded-lectures', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            courseId: selectedCourse.id,
+            lecture: lectureData,
+          }),
+        });
+
+        const responseData = await response.json();
+        console.log('Add response:', { status: response.status, data: responseData });
+
+        if (response.ok) {
+          // Refetch all courses to get fresh data
+          await refetchCourses();
+          toast.success('Recorded lecture added!');
+        } else {
+          toast.error(responseData.error || 'Failed to add lecture');
+        }
+      }
+
+      setRecordedLectureDialog({ open: false, editing: null });
+    } catch (error) {
+      console.error('Error saving recorded lecture:', error);
+      toast.error('Error saving recorded lecture');
+    }
+  };
+
+  const handleDeleteRecordedLecture = async (lectureId: string) => {
+    try {
+      const courseWithLecture = courses.find(c =>
+        c.recordedLectures?.some(l => l.id === lectureId)
+      );
+
+      if (!courseWithLecture) {
+        toast.error('Lecture not found');
+        return;
+      }
+
+      console.log('Deleting lecture:', { courseId: courseWithLecture.id, lectureId });
+
+      const response = await fetch('/api/recorded-lectures', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          courseId: courseWithLecture.id,
+          lectureId: lectureId,
+        }),
+      });
+
+      const responseData = await response.json();
+      console.log('Delete response:', { status: response.status, data: responseData });
+
+      if (response.ok) {
+        // Refetch all courses to get fresh data
+        await refetchCourses();
+        toast.success('Recorded lecture deleted!');
+      } else {
+        toast.error(responseData.error || 'Failed to delete lecture');
+      }
+    } catch (error) {
+      console.error('Error deleting recorded lecture:', error);
+      toast.error('Error deleting recorded lecture');
+    }
   };
 
   const resetNoteDialog = () => {
@@ -928,6 +1034,107 @@ const handleSaveCategory = async (formData: Record<string, string>) => {
               </div>
             )}
 
+            {/* RECORDED LECTURES */}
+            {activeTab === 'recorded-lectures' && (
+              <div>
+                <div className="mb-6 flex items-center justify-between">
+                  <h2 className="font-heading text-2xl font-bold text-foreground">Recorded Lectures Management</h2>
+                  <Button size="sm" onClick={() => setRecordedLectureDialog({ open: true, editing: null })}><Plus className="h-4 w-4 mr-1" /> Add Lecture</Button>
+                </div>
+
+                {courses.length === 0 ? (
+                  <div className="rounded-lg border border-border bg-card p-6 text-center">
+                    <p className="text-muted-foreground">No courses available. Please create a course first.</p>
+                  </div>
+                ) : (
+                  <div className="space-y-6">
+                    {courses.map(course => (
+                      <div key={course.id}>
+                        <h3 className="font-medium text-card-foreground mb-3 flex items-center gap-2">
+                          <BookOpen className="h-4 w-4 text-gold" />
+                          {course.title}
+                        </h3>
+                        {!course.recordedLectures || course.recordedLectures.length === 0 ? (
+                          <div className="rounded-lg border border-border bg-muted/30 p-4 text-center">
+                            <p className="text-xs text-muted-foreground">No recorded lectures for this course</p>
+                          </div>
+                        ) : (
+                          <div className="rounded-lg border border-border bg-card overflow-hidden">
+                            <table className="w-full text-sm">
+                              <thead className="bg-muted">
+                                <tr>
+                                  <th className="px-4 py-2 text-left text-xs font-medium text-muted-foreground">Module</th>
+                                  <th className="px-4 py-2 text-left text-xs font-medium text-muted-foreground">Lecture Title</th>
+                                  <th className="px-4 py-2 text-left text-xs font-medium text-muted-foreground">Duration</th>
+                                  <th className="px-4 py-2 text-left text-xs font-medium text-muted-foreground">Type</th>
+                                  <th className="px-4 py-2 text-left text-xs font-medium text-muted-foreground">Actions</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {course.recordedLectures.map((lecture, idx) => (
+                                  <tr key={lecture.id} className={idx > 0 ? 'border-t border-border' : ''}>
+                                    <td className="px-4 py-2 text-card-foreground">{lecture.moduleName}</td>
+                                    <td className="px-4 py-2">
+                                      <div>
+                                        <p className="text-card-foreground">{lecture.lectureTitle}</p>
+                                        {lecture.description && (
+                                          <p className="text-xs text-muted-foreground mt-0.5 truncate">{lecture.description}</p>
+                                        )}
+                                      </div>
+                                    </td>
+                                    <td className="px-4 py-2 text-muted-foreground">{lecture.duration}</td>
+                                    <td className="px-4 py-2">
+                                      <span className={`rounded-sm px-2 py-0.5 text-xs font-medium ${
+                                        lecture.preview
+                                          ? 'bg-blue-100 text-blue-700'
+                                          : 'bg-gray-100 text-gray-700'
+                                      }`}>
+                                        {lecture.preview ? 'Free' : 'Premium'}
+                                      </span>
+                                    </td>
+                                    <td className="px-4 py-2">
+                                      <div className="flex gap-1">
+                                        <Button
+                                          variant="ghost"
+                                          size="sm"
+                                          className="h-7 text-xs"
+                                          onClick={() => setRecordedLectureDialog({ open: true, editing: lecture })}
+                                        >
+                                          <Pencil className="h-3 w-3 mr-1" /> Edit
+                                        </Button>
+                                        <Button
+                                          variant="ghost"
+                                          size="sm"
+                                          className="h-7 text-xs text-destructive"
+                                          onClick={() => handleDeleteRecordedLecture(lecture.id)}
+                                        >
+                                          <Trash2 className="h-3 w-3 mr-1" /> Delete
+                                        </Button>
+                                        {lecture.videoUrl && (
+                                          <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            className="h-7 text-xs text-primary"
+                                            onClick={() => window.open(lecture.videoUrl, '_blank')}
+                                          >
+                                            <ExternalLink className="h-3 w-3 mr-1" /> View
+                                          </Button>
+                                        )}
+                                      </div>
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* NOTES */}
             {activeTab === 'notes' && (
               <div>
@@ -1192,6 +1399,7 @@ const handleSaveCategory = async (formData: Record<string, string>) => {
       )}
       {classDialog.open && <ClassFormDialog initial={classDialog.editing} courses={courses} onSave={handleSaveClass} onClose={() => setClassDialog({ open: false, editing: null })} />}
       {articleDialog.open && <ArticleFormDialog initial={articleDialog.editing} categories={categories} onSave={handleSaveArticle} onClose={() => setArticleDialog({ open: false, editing: null })} />}
+      {recordedLectureDialog.open && <RecordedLectureFormDialog initial={recordedLectureDialog.editing} courses={courses} onSave={handleSaveRecordedLecture} onClose={() => setRecordedLectureDialog({ open: false, editing: null })} />}
       {categoryDialog.open && (
         <DialogOverlay onClose={() => { setCategoryDialog({ open: false, editing: null }); setCategoryForm({ name: '' }); }}>
           <h3 className="font-heading text-lg font-semibold text-card-foreground mb-4">{categoryDialog.editing ? 'Edit Category' : 'Add Category'}</h3>

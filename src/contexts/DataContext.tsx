@@ -28,6 +28,7 @@ interface DataContextType {
   addCourse: (course: Course) => Promise<void>;
   updateCourse: (id: string, course: Partial<Course>) => Promise<void>;
   deleteCourse: (id: string) => Promise<void>;
+  refetchCourses: () => Promise<void>;
   addCourseReview: (courseId: string, review: CourseReview) => Promise<void>;
   addLiveClass: (cls: LiveClass) => void;
   updateLiveClass: (id: string, cls: Partial<LiveClass>) => void;
@@ -290,6 +291,30 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
+  const refetchCourses = async () => {
+    try {
+      const response = await fetch('/api/courses');
+      if (response.ok) {
+        const coursesList = await response.json();
+        const freshCourses = coursesList.map((item: any) => ({
+          ...item,
+          id: item._id ? item._id.toString() : item.id,
+          modulesList: item.modulesList || [],
+          highlights: item.highlights || [],
+          advantages: item.advantages || [],
+          requirements: item.requirements || [],
+          targetAudience: item.targetAudience || [],
+          recordedLectures: item.recordedLectures || [],
+          reviews: item.reviews || [],
+          tags: item.tags || [],
+        }));
+        setCourses(freshCourses);
+      }
+    } catch (error) {
+      console.error('Failed to refetch courses:', error);
+    }
+  };
+
   const addCourseReview = async (courseId: string, review: CourseReview) => {
     try {
       // Update locally immediately
@@ -497,7 +522,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       courses, liveClasses, articles, payments, notes, testimonials,
       enquiries, articleRequests, supportTickets, categories,
       enrollments, lectureProgress,
-      addCourse, updateCourse, deleteCourse, addCourseReview,
+      addCourse, updateCourse, deleteCourse, refetchCourses, addCourseReview,
       addLiveClass: (c) => setLiveClasses(p => [...p, c]),
       updateLiveClass: (id, d) => setLiveClasses(p => p.map(c => c.id === id ? { ...c, ...d } : c)),
       deleteLiveClass: (id) => setLiveClasses(p => p.filter(c => c.id !== id)),
